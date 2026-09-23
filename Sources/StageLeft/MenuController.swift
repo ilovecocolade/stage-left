@@ -31,8 +31,10 @@ final class MenuController: NSObject, NSMenuDelegate {
 
         registerHotKeys()
         reloadDisplays()
+        #if DEBUG
         logDiagnosticsIfRequested()
         if ProcessInfo.processInfo.environment["STAGELEFT_SELFTEST"] != nil { SelfTest.run() }
+        #endif
 
         NotificationCenter.default.addObserver(
             self, selector: #selector(screensChanged),
@@ -59,24 +61,9 @@ final class MenuController: NSObject, NSMenuDelegate {
 
         if Accessibility.isTrusted {
             engine.start()
-            if ProcessInfo.processInfo.environment["STAGELEFT_LIVETEST"] != nil {
-                LiveTest.run(engine: engine, preferences: prefs)
-            }
-            if let argument = ProcessInfo.processInfo.environment["STAGELEFT_RESCUE"] {
-                Rescue.run(argument: argument)
-            }
-            if ProcessInfo.processInfo.environment["STAGELEFT_FSTEST"] != nil {
-                FullScreenSurvey.run()
-            }
-            if let target = ProcessInfo.processInfo.environment["STAGELEFT_STRANDTEST"] {
-                StrandTest.run(appNamed: target)
-            }
-            if ProcessInfo.processInfo.environment["STAGELEFT_STRIPDUMP"] != nil {
-                Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
-                    guard let self else { return }
-                    FileHandle.standardError.write(Data("strip:\n\(self.strip.report())\n".utf8))
-                }
-            }
+            #if DEBUG
+            runDiagnosticHooks()
+            #endif
         } else {
             // Ask on first launch; the engine starts by itself once granted.
             Accessibility.requestPermission()
@@ -162,10 +149,12 @@ final class MenuController: NSObject, NSMenuDelegate {
     }
 
     @objc private func sharedStateChanged() {
+        #if DEBUG
         if ProcessInfo.processInfo.environment["STAGELEFT_DEBUG"] != nil {
             FileHandle.standardError.write(Data(
                 "control changed staging to \(SharedState.isStaging ? "on" : "off")\n".utf8))
         }
+        #endif
         engine.evaluate()
         refreshIcon()
     }
@@ -425,6 +414,26 @@ final class MenuController: NSObject, NSMenuDelegate {
         NSApp.terminate(nil)
     }
 
+    #if DEBUG
+    // Everything below reads the process environment, which whoever launches the
+    // app controls, and acts under the app's Accessibility permission — reading
+    // window titles, un-minimising and hiding other apps' windows. That must
+    // never be reachable in a release build, so none of it is compiled there.
+
+    private func runDiagnosticHooks() {
+        let environment = ProcessInfo.processInfo.environment
+        if environment["STAGELEFT_LIVETEST"] != nil { LiveTest.run(engine: engine, preferences: prefs) }
+        if let argument = environment["STAGELEFT_RESCUE"] { Rescue.run(argument: argument) }
+        if environment["STAGELEFT_FSTEST"] != nil { FullScreenSurvey.run() }
+        if let target = environment["STAGELEFT_STRANDTEST"] { StrandTest.run(appNamed: target) }
+        if environment["STAGELEFT_STRIPDUMP"] != nil {
+            Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+                guard let self else { return }
+                FileHandle.standardError.write(Data("strip:\n\(self.strip.report())\n".utf8))
+            }
+        }
+    }
+
     private func fullScreenReport() -> String {
         let all = Display.connected
         let full = WindowScanner.displaysWithFullScreenWindow(among: all)
@@ -447,4 +456,5 @@ final class MenuController: NSObject, NSMenuDelegate {
             """
         FileHandle.standardError.write(Data(report.utf8))
     }
+    #endif
 }

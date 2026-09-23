@@ -1,3 +1,6 @@
+#if DEBUG
+// Debug builds only: see "Diagnostics" in the README for why.
+
 import AppKit
 import ApplicationServices
 
@@ -36,3 +39,4 @@ enum Rescue {
         FileHandle.standardError.write(Data(text.utf8))
     }
 }
+#endif

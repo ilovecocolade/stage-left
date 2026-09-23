@@ -1,3 +1,6 @@
+#if DEBUG
+// Debug builds only: see "Diagnostics" in the README for why.
+
 import AppKit
 
 /// Stages a real display for a moment, then puts everything back.
@@ -67,3 +70,4 @@ enum LiveTest {
         FileHandle.standardError.write(Data(text.utf8))
     }
 }
+#endif

@@ -49,8 +49,16 @@ if [ -z "$IDENTITY" ]; then
 fi
 
 # --- The menu bar app ---------------------------------------------------------
-swift build -c release
-BIN="$(swift build -c release --show-bin-path)/StageLeft"
+# Release by default. A debug build compiles in the diagnostic hooks described
+# in the README, which anything able to launch the app can drive — build one
+# only to investigate a problem, never to use day to day.
+CONFIGURATION="${STAGELEFT_CONFIGURATION:-release}"
+case "$CONFIGURATION" in
+    release|debug) ;;
+    *) echo "STAGELEFT_CONFIGURATION must be release or debug" >&2; exit 1 ;;
+esac
+swift build -c "$CONFIGURATION"
+BIN="$(swift build -c "$CONFIGURATION" --show-bin-path)/StageLeft"
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
@@ -179,9 +187,15 @@ sed "s/__APP_GROUP__/$APP_GROUP/g" StageLeft.entitlements > build/entitlements/S
 sed "s/__APP_GROUP__/$APP_GROUP/g" Extension/Controls.entitlements > build/entitlements/Controls.entitlements
 
 # Nested code is signed inside out, so the app's seal covers the extension.
-[ -d "$APPEX" ] && codesign --force --sign "$IDENTITY" --timestamp=none \
+#
+# --options runtime turns on the Hardened Runtime. Stage Left holds the user's
+# Accessibility permission; without the Hardened Runtime, anything that can
+# launch it can inject a library through DYLD_INSERT_LIBRARIES and inherit that
+# permission. Never add the allow-dyld-environment-variables or
+# disable-library-validation entitlements, which would reopen exactly that.
+[ -d "$APPEX" ] && codesign --force --sign "$IDENTITY" --timestamp=none --options runtime \
     --entitlements build/entitlements/Controls.entitlements "$APPEX"
-codesign --force --sign "$IDENTITY" --timestamp=none \
+codesign --force --sign "$IDENTITY" --timestamp=none --options runtime \
     --entitlements build/entitlements/StageLeft.entitlements "$APP"
 codesign --verify --strict --deep "$APP"
 

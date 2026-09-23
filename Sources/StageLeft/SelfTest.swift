@@ -1,3 +1,6 @@
+#if DEBUG
+// Debug builds only: see "Diagnostics" in the README for why.
+
 import AppKit
 
 /// A dry run: reports what the engine would stage, without moving anything.
@@ -52,3 +55,4 @@ enum SelfTest {
         FileHandle.standardError.write(Data(text.utf8))
     }
 }
+#endif

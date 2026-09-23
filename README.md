@@ -54,8 +54,9 @@ open "/Applications/Stage Left.app"
 ```
 
 `build.sh` signs with the first Apple Development or Developer ID certificate in
-your keychain (set `STAGELEFT_IDENTITY` to choose one), installs into
-`/Applications`, and leaves no launchable copy behind in `build/`.
+your keychain (set `STAGELEFT_IDENTITY` to choose one), turns on the Hardened
+Runtime, installs into `/Applications`, and leaves no launchable copy behind in
+`build/`.
 
 A real signing identity matters more than it looks. An ad-hoc signature changes
 with every build, so macOS treats each build as a new app and silently drops the
@@ -223,13 +224,34 @@ these was needed, and most fail silently:
   `build.sh` reads the team from your certificate (or `STAGELEFT_TEAM_ID`) and
   writes the group into the entitlements and each bundle's `Info.plist`.
 
+### Guarding the Accessibility permission
+
+Stage Left needs Accessibility permission to control other apps' windows, which
+makes it worth borrowing: another program running as you, without that
+permission, could try to get Stage Left to act for it. Two things stop that.
+
+- **The Hardened Runtime is on.** Without it, launching the app with
+  `DYLD_INSERT_LIBRARIES` would load arbitrary code inside it, and that code would
+  inherit the permission. `build.sh` signs the app and the Control Centre button
+  with `--options runtime`, and neither has an entitlement that loosens it.
+- **Release builds take no instructions from their environment.** The
+  diagnostics below are driven by environment variables, which whoever launches
+  the app controls, and some of them read window titles or un-minimise and hide
+  other apps' windows. They are compiled into debug builds only.
+
 ## Diagnostics
 
-Launch the binary directly with one of these set; output goes to standard error.
+These exist in **debug builds only**. Build one with
+`STAGELEFT_CONFIGURATION=debug ./build.sh`, then launch the binary directly with
+one of the variables set; output goes to standard error.
 
 ```bash
 STAGELEFT_DEBUG=1 "/Applications/Stage Left.app/Contents/MacOS/StageLeft"
 ```
+
+A debug build lets anything that can launch the app drive these hooks — reading
+every window title, for one — so build one to investigate a problem, then go back
+to a release build with a plain `./build.sh`.
 
 | Variable | What it does |
 |---|---|
