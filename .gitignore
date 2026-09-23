@@ -1,0 +1,10 @@
+# Build output. build/ also holds entitlements generated with your signing
+# team's ID, which must never be committed.
+.build/
+build/
+.swiftpm/
+*.xcodeproj/
+DerivedData/
+
+# macOS
+.DS_Store
