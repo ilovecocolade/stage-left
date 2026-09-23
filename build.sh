@@ -1,5 +1,5 @@
 #!/bin/bash
-# Builds Stagehand and installs it into /Applications.
+# Builds Stage Left and installs it into /Applications.
 #
 # The menu bar app needs only Command Line Tools. The Control Centre button is
 # built too when a full Xcode is installed; see "The Control Centre button" in
@@ -7,9 +7,9 @@
 set -euo pipefail
 
 cd "$(dirname "$0")"
-APP="build/Stagehand.app"
-APPEX="$APP/Contents/PlugIns/StagehandControls.appex"
-BUNDLE_ID="${STAGEHAND_BUNDLE_ID:-dev.stagehand.Stagehand}"
+APP="build/Stage Left.app"
+APPEX="$APP/Contents/PlugIns/StageLeftControls.appex"
+BUNDLE_ID="${STAGELEFT_BUNDLE_ID:-io.github.ilovecocolade.stageleft}"
 VERSION="1.0"
 LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
 
@@ -17,7 +17,7 @@ LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchSe
 # Sign with a real identity when one is available. An ad-hoc signature changes
 # with every build, so macOS treats each build as a different app and silently
 # voids the Accessibility permission; a real identity keeps the grant.
-IDENTITY="${STAGEHAND_IDENTITY:-}"
+IDENTITY="${STAGELEFT_IDENTITY:-}"
 if [ -z "$IDENTITY" ]; then
     IDENTITY=$(security find-identity -v -p codesigning 2>/dev/null \
         | awk '/Apple Development|Developer ID Application/ { print $2; exit }')
@@ -26,9 +26,9 @@ fi
 # The app and its Control Centre extension share preferences through an app
 # group, whose name must start with the signing team. Read the team from the
 # certificate rather than writing it into the source.
-TEAM_ID="${STAGEHAND_TEAM_ID:-}"
+TEAM_ID="${STAGELEFT_TEAM_ID:-}"
 if [ -n "$TEAM_ID" ] && ! [[ "$TEAM_ID" =~ ^[A-Z0-9]{10}$ ]]; then
-    echo "STAGEHAND_TEAM_ID must be a 10-character Apple team ID" >&2
+    echo "STAGELEFT_TEAM_ID must be a 10-character Apple team ID" >&2
     exit 1
 fi
 if [ -z "$TEAM_ID" ] && [ -n "$IDENTITY" ]; then
@@ -38,9 +38,9 @@ if [ -z "$TEAM_ID" ] && [ -n "$IDENTITY" ]; then
         | sed -n 's/.*OU *= *\([A-Z0-9]\{10\}\).*/\1/p')
 fi
 if [ -n "$TEAM_ID" ]; then
-    APP_GROUP="$TEAM_ID.dev.stagehand"
+    APP_GROUP="$TEAM_ID.$BUNDLE_ID"
 else
-    APP_GROUP="dev.stagehand.shared"
+    APP_GROUP="$BUNDLE_ID.shared"
 fi
 if [ -z "$IDENTITY" ]; then
     IDENTITY="-"
@@ -50,11 +50,11 @@ fi
 
 # --- The menu bar app ---------------------------------------------------------
 swift build -c release
-BIN="$(swift build -c release --show-bin-path)/Stagehand"
+BIN="$(swift build -c release --show-bin-path)/StageLeft"
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$BIN" "$APP/Contents/MacOS/Stagehand"
+cp "$BIN" "$APP/Contents/MacOS/StageLeft"
 cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 
@@ -64,18 +64,19 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <plist version="1.0">
 <dict>
     <key>CFBundleDevelopmentRegion</key><string>en</string>
-    <key>CFBundleExecutable</key><string>Stagehand</string>
+    <key>CFBundleExecutable</key><string>StageLeft</string>
     <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>CFBundleIdentifier</key><string>$BUNDLE_ID</string>
     <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
-    <key>CFBundleName</key><string>Stagehand</string>
+    <key>CFBundleName</key><string>Stage Left</string>
+    <key>CFBundleDisplayName</key><string>Stage Left</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>$VERSION</string>
     <key>CFBundleVersion</key><string>$VERSION</string>
     <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>LSUIElement</key><true/>
     <key>NSHumanReadableCopyright</key><string>Stage Manager, per screen.</string>
-    <key>StagehandAppGroup</key><string>$APP_GROUP</string>
+    <key>StageLeftAppGroup</key><string>$APP_GROUP</string>
 </dict>
 </plist>
 PLIST
@@ -117,23 +118,23 @@ PROTOCOLS
     #   the Swift @main entry point runs instead of the extension runtime, and
     #   ExtensionKit traps the moment launchd starts the extension.
     xcrun swiftc -target "$TRIPLE" -sdk "$SDK" -parse-as-library -wmo -O \
-        -module-name StagehandControls \
+        -module-name StageLeftControls \
         -Xlinker -e -Xlinker _NSExtensionMain \
-        -emit-const-values-path "$WORK/StagehandControls.swiftconstvalues" \
+        -emit-const-values-path "$WORK/StageLeftControls.swiftconstvalues" \
         -Xfrontend -const-gather-protocols-file -Xfrontend "$WORK/protocols.json" \
-        -o "$APPEX/Contents/MacOS/StagehandControls" \
-        Extension/StagehandControls.swift Sources/Stagehand/SharedState.swift
+        -o "$APPEX/Contents/MacOS/StageLeftControls" \
+        Extension/StageLeftControls.swift Sources/StageLeft/SharedState.swift
 
-    printf '%s\n%s\n' "$PWD/Extension/StagehandControls.swift" \
-                       "$PWD/Sources/Stagehand/SharedState.swift" > "$WORK/sources.txt"
-    echo "$PWD/$WORK/StagehandControls.swiftconstvalues" > "$WORK/constvals.txt"
+    printf '%s\n%s\n' "$PWD/Extension/StageLeftControls.swift" \
+                       "$PWD/Sources/StageLeft/SharedState.swift" > "$WORK/sources.txt"
+    echo "$PWD/$WORK/StageLeftControls.swiftconstvalues" > "$WORK/constvals.txt"
 
     # The Control Centre gallery finds the control's intent through this
     # metadata, not the binary: without it the control never appears.
     "$TOOLCHAIN/usr/bin/appintentsmetadataprocessor" \
         --output "$APPEX/Contents/Resources" \
         --toolchain-dir "$TOOLCHAIN" \
-        --module-name StagehandControls \
+        --module-name StageLeftControls \
         --sdk-root "$SDK" \
         --xcode-version "$XCODE_BUILD" \
         --platform-family macOS \
@@ -149,15 +150,15 @@ PROTOCOLS
 <plist version="1.0">
 <dict>
     <key>CFBundleDevelopmentRegion</key><string>en</string>
-    <key>CFBundleExecutable</key><string>StagehandControls</string>
+    <key>CFBundleExecutable</key><string>StageLeftControls</string>
     <key>CFBundleIdentifier</key><string>$BUNDLE_ID.Controls</string>
     <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
-    <key>CFBundleName</key><string>StagehandControls</string>
+    <key>CFBundleName</key><string>StageLeftControls</string>
     <key>CFBundlePackageType</key><string>XPC!</string>
     <key>CFBundleShortVersionString</key><string>$VERSION</string>
     <key>CFBundleVersion</key><string>$VERSION</string>
     <key>LSMinimumSystemVersion</key><string>$SDK_VERSION</string>
-    <key>StagehandAppGroup</key><string>$APP_GROUP</string>
+    <key>StageLeftAppGroup</key><string>$APP_GROUP</string>
     <key>NSExtension</key>
     <dict>
         <key>NSExtensionPointIdentifier</key><string>com.apple.widgetkit-extension</string>
@@ -174,23 +175,23 @@ fi
 # --- Sign ---------------------------------------------------------------------
 # Entitlements are templates: the app group is filled in here.
 mkdir -p build/entitlements
-sed "s/__APP_GROUP__/$APP_GROUP/g" Stagehand.entitlements > build/entitlements/Stagehand.entitlements
+sed "s/__APP_GROUP__/$APP_GROUP/g" StageLeft.entitlements > build/entitlements/StageLeft.entitlements
 sed "s/__APP_GROUP__/$APP_GROUP/g" Extension/Controls.entitlements > build/entitlements/Controls.entitlements
 
 # Nested code is signed inside out, so the app's seal covers the extension.
 [ -d "$APPEX" ] && codesign --force --sign "$IDENTITY" --timestamp=none \
     --entitlements build/entitlements/Controls.entitlements "$APPEX"
 codesign --force --sign "$IDENTITY" --timestamp=none \
-    --entitlements build/entitlements/Stagehand.entitlements "$APP"
+    --entitlements build/entitlements/StageLeft.entitlements "$APP"
 codesign --verify --strict --deep "$APP"
 
 # --- Install ------------------------------------------------------------------
 # /Applications, not ~/Applications: the widget daemon only launches extensions
 # from a system application directory. From a home folder the extension is
 # listed but never started, so the Control Centre button never appears.
-INSTALLED="/Applications/Stagehand.app"
+INSTALLED="/Applications/Stage Left.app"
 if ! rm -rf "$INSTALLED" 2>/dev/null || ! cp -R "$APP" "$INSTALLED" 2>/dev/null; then
-    INSTALLED="$HOME/Applications/Stagehand.app"
+    INSTALLED="$HOME/Applications/Stage Left.app"
     mkdir -p "$HOME/Applications"
     rm -rf "$INSTALLED"
     cp -R "$APP" "$INSTALLED"
@@ -200,7 +201,7 @@ fi
 "$LSREGISTER" -f "$INSTALLED" 2>/dev/null || true
 
 # Leave nothing launchable behind in build/. Spotlight indexes this folder, and
-# opening Stagehand from there once started a second copy alongside the
+# opening Stage Left from there once started a second copy alongside the
 # installed one.
 "$LSREGISTER" -u "$PWD/$APP" 2>/dev/null || true
 rm -rf "$APP"

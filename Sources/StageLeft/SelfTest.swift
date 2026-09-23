@@ -7,7 +7,7 @@ import AppKit
 /// somebody's windows onto the wrong monitor. This checks them harmlessly.
 enum SelfTest {
     static func run() {
-        var out = "Stagehand dry run\n"
+        var out = "Stage Left dry run\n"
 
         guard Accessibility.isTrusted else {
             write(out + "  Accessibility NOT granted — nothing to report.\n")

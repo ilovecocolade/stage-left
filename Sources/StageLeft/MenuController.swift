@@ -32,7 +32,7 @@ final class MenuController: NSObject, NSMenuDelegate {
         registerHotKeys()
         reloadDisplays()
         logDiagnosticsIfRequested()
-        if ProcessInfo.processInfo.environment["STAGEHAND_SELFTEST"] != nil { SelfTest.run() }
+        if ProcessInfo.processInfo.environment["STAGELEFT_SELFTEST"] != nil { SelfTest.run() }
 
         NotificationCenter.default.addObserver(
             self, selector: #selector(screensChanged),
@@ -59,19 +59,19 @@ final class MenuController: NSObject, NSMenuDelegate {
 
         if Accessibility.isTrusted {
             engine.start()
-            if ProcessInfo.processInfo.environment["STAGEHAND_LIVETEST"] != nil {
+            if ProcessInfo.processInfo.environment["STAGELEFT_LIVETEST"] != nil {
                 LiveTest.run(engine: engine, preferences: prefs)
             }
-            if let argument = ProcessInfo.processInfo.environment["STAGEHAND_RESCUE"] {
+            if let argument = ProcessInfo.processInfo.environment["STAGELEFT_RESCUE"] {
                 Rescue.run(argument: argument)
             }
-            if ProcessInfo.processInfo.environment["STAGEHAND_FSTEST"] != nil {
+            if ProcessInfo.processInfo.environment["STAGELEFT_FSTEST"] != nil {
                 FullScreenSurvey.run()
             }
-            if let target = ProcessInfo.processInfo.environment["STAGEHAND_STRANDTEST"] {
+            if let target = ProcessInfo.processInfo.environment["STAGELEFT_STRANDTEST"] {
                 StrandTest.run(appNamed: target)
             }
-            if ProcessInfo.processInfo.environment["STAGEHAND_STRIPDUMP"] != nil {
+            if ProcessInfo.processInfo.environment["STAGELEFT_STRIPDUMP"] != nil {
                 Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
                     guard let self else { return }
                     FileHandle.standardError.write(Data("strip:\n\(self.strip.report())\n".utf8))
@@ -115,7 +115,7 @@ final class MenuController: NSObject, NSMenuDelegate {
             let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
             item.isVisible = true
             item.menu = menu
-            item.button?.toolTip = "Stagehand — Stage Manager per screen"
+            item.button?.toolTip = "Stage Left — Stage Manager per screen"
             statusItem = item
             refreshIcon()
         } else if let item = statusItem {
@@ -162,7 +162,7 @@ final class MenuController: NSObject, NSMenuDelegate {
     }
 
     @objc private func sharedStateChanged() {
-        if ProcessInfo.processInfo.environment["STAGEHAND_DEBUG"] != nil {
+        if ProcessInfo.processInfo.environment["STAGELEFT_DEBUG"] != nil {
             FileHandle.standardError.write(Data(
                 "control changed staging to \(SharedState.isStaging ? "on" : "off")\n".utf8))
         }
@@ -302,7 +302,7 @@ final class MenuController: NSObject, NSMenuDelegate {
         menu.removeAllItems()
 
         if !Accessibility.isTrusted {
-            menu.addItem(warning("Stagehand needs Accessibility permission",
+            menu.addItem(warning("Stage Left needs Accessibility permission",
                                  action: #selector(grantAccessibility)))
             menu.addItem(.separator())
         }
@@ -379,7 +379,7 @@ final class MenuController: NSObject, NSMenuDelegate {
         login.target = self
         menu.addItem(login)
 
-        let quit = NSMenuItem(title: "Quit Stagehand", action: #selector(quit), keyEquivalent: "q")
+        let quit = NSMenuItem(title: "Quit Stage Left", action: #selector(quit), keyEquivalent: "q")
         quit.target = self
         menu.addItem(quit)
     }
@@ -431,11 +431,11 @@ final class MenuController: NSObject, NSMenuDelegate {
         return full.isEmpty ? "none" : all.filter { full.contains($0.id) }.map(\.name).joined(separator: ", ")
     }
 
-    /// Run with STAGEHAND_DEBUG=1 to confirm the app came up healthy.
+    /// Run with STAGELEFT_DEBUG=1 to confirm the app came up healthy.
     private func logDiagnosticsIfRequested() {
-        guard ProcessInfo.processInfo.environment["STAGEHAND_DEBUG"] != nil else { return }
+        guard ProcessInfo.processInfo.environment["STAGELEFT_DEBUG"] != nil else { return }
         let report = """
-            Stagehand diagnostics
+            Stage Left diagnostics
               statusItem: \(statusItem == nil ? "MISSING" : "created")
               button width: \(statusItem?.button?.frame.width.description ?? "n/a")
               accessibility: \(Accessibility.isTrusted ? "granted" : "NOT GRANTED")

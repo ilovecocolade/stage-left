@@ -1,6 +1,6 @@
 import AppKit
 
-/// A tiny command line, so a Shortcut can drive Stagehand.
+/// A tiny command line, so a Shortcut can drive Stage Left.
 ///
 /// This is how the Control Centre button works: Control Centre can host a
 /// Shortcut, and a Shortcut can run a shell command. That sidesteps needing a
@@ -27,7 +27,7 @@ enum CommandLineInterface {
             usage()
             return true
         default:
-            write("Stagehand: unknown option \(command)\n")
+            write("Stage Left: unknown option \(command)\n")
             usage()
             exit(2)
         }
@@ -51,9 +51,9 @@ enum CommandLineInterface {
         setStaging(true)
     }
 
-    /// Unhides every hidden app, whether or not Stagehand hid it.
+    /// Unhides every hidden app, whether or not Stage Left hid it.
     ///
-    /// The way out if apps have gone missing. Hiding is how Stagehand takes a
+    /// The way out if apps have gone missing. Hiding is how Stage Left takes a
     /// whole app off stage, so a lost record used to mean the app stayed hidden
     /// with nothing left to bring it back.
     private static func unhideAll() {
@@ -95,7 +95,7 @@ enum CommandLineInterface {
 
     private static func usage() {
         write("""
-            Stagehand
+            Stage Left
 
               --on, --builtin-only   Stage the built-in screen only
               --off                  Stop staging everywhere
@@ -103,7 +103,7 @@ enum CommandLineInterface {
               --status               Print the current state
               --unhide-all           Bring back every hidden app
 
-            With no options, Stagehand runs as a menu bar app.
+            With no options, Stage Left runs as a menu bar app.
 
             """)
     }

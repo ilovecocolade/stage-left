@@ -1,20 +1,20 @@
 <p align="center">
-  <img src="docs/logo.png" width="160" alt="Stagehand icon: one window in a spotlight, three more waiting in the wings">
+  <img src="docs/logo.png" width="160" alt="Stage Left icon: one window in a spotlight, three more waiting in the wings">
 </p>
 
-<h1 align="center">Stagehand</h1>
+<h1 align="center">Stage Left</h1>
 
 <p align="center"><strong>Stage Manager for the screens you choose — and a normal desktop on the rest.</strong></p>
 
 macOS Stage Manager is all or nothing: switch it on and every display gets it.
-Stagehand gives each screen its own setting. Stage your laptop's built-in display
+Stage Left gives each screen its own setting. Stage your laptop's built-in display
 while the external monitor on your desk behaves like an ordinary desktop, and
 flip the whole thing on or off from Control Centre.
 
-Stagehand is a small menu bar app written in Swift. It uses no network access
+Stage Left is a small menu bar app written in Swift. It uses no network access
 and collects nothing.
 
-> Stage Manager is a trademark of Apple Inc. Stagehand is an independent project
+> Stage Manager is a trademark of Apple Inc. Stage Left is an independent project
 > and is not affiliated with or endorsed by Apple.
 
 ## Features
@@ -23,7 +23,7 @@ and collects nothing.
   put and the others are tucked into a strip at the left edge. Click one to
   bring it back. Screens you have not selected are never touched.
 - **Remembers each monitor.** Settings are tied to the physical display, so a
-  monitor keeps its setting when you unplug and reconnect it. A monitor Stagehand
+  monitor keeps its setting when you unplug and reconnect it. A monitor Stage Left
   has never seen starts unselected — handy if you move between desks.
 - **Control Centre button.** One switch to turn staging on and off, in place of
   Apple's Stage Manager button (requires macOS 26 or later; see below).
@@ -36,7 +36,7 @@ and collects nothing.
 ## Requirements
 
 - macOS 14 or later. Developed and tested on macOS 27 with two displays.
-- **Accessibility permission**, which macOS asks for on first launch. Stagehand
+- **Accessibility permission**, which macOS asks for on first launch. Stage Left
   needs it to hide, minimise and restore other apps' windows, and uses it for
   nothing else.
 - To build: Xcode Command Line Tools. The Control Centre button additionally
@@ -47,26 +47,26 @@ and collects nothing.
 There are no prebuilt releases yet; build from source:
 
 ```bash
-git clone https://github.com/ilovecocolade/stagehand.git
-cd stagehand
+git clone https://github.com/ilovecocolade/stage-left.git
+cd stage-left
 ./build.sh
-open /Applications/Stagehand.app
+open "/Applications/Stage Left.app"
 ```
 
 `build.sh` signs with the first Apple Development or Developer ID certificate in
-your keychain (set `STAGEHAND_IDENTITY` to choose one), installs into
+your keychain (set `STAGELEFT_IDENTITY` to choose one), installs into
 `/Applications`, and leaves no launchable copy behind in `build/`.
 
 A real signing identity matters more than it looks. An ad-hoc signature changes
 with every build, so macOS treats each build as a new app and silently drops the
 Accessibility permission you granted. Without a certificate the app still works,
 but you will have to grant the permission again after each build — and if it ever
-claims to need permission you have already given, remove Stagehand from System
+claims to need permission you have already given, remove Stage Left from System
 Settings → Privacy & Security → Accessibility and add it again.
 
 ## Using it
 
-Open Stagehand and tick the screens to stage. From then on:
+Open Stage Left and tick the screens to stage. From then on:
 
 | Where | What |
 |---|---|
@@ -76,23 +76,23 @@ Open Stagehand and tick the screens to stage. From then on:
 | `⌥⌘1` … `⌥⌘9` | Stage or release that screen |
 | `⌥⌘S` | Bring back every tucked window |
 
-Opening Stagehand while it is running brings up its settings. That is also how
+Opening Stage Left while it is running brings up its settings. That is also how
 you get back to them if you hide the menu bar icon.
 
-Stagehand turns off Apple's own Stage Manager when you ask it to, and warns you
+Stage Left turns off Apple's own Stage Manager when you ask it to, and warns you
 if it is on, since the two fight over the same windows.
 
 ### The Control Centre button
 
 Open Control Centre, click **Edit Controls**, remove **Stage Manager** and add
-**Stagehand**. Turn on **Open at Login** as well: the button only works while the
+**Stage Left**. Turn on **Open at Login** as well: the button only works while the
 app is running. The button is a single on/off switch; which screens it applies to
 is chosen in the app.
 
 ### From the command line
 
 ```bash
-/Applications/Stagehand.app/Contents/MacOS/Stagehand --toggle
+"/Applications/Stage Left.app/Contents/MacOS/StageLeft" --toggle
 ```
 
 | Option | Effect |
@@ -105,13 +105,13 @@ is chosen in the app.
 
 `--on` writes the whole preset each time rather than remembering it, so it lands
 the same way whatever monitor is plugged in. Put it in a Shortcut to drive
-Stagehand from anywhere.
+Stage Left from anywhere.
 
 ## Privacy
 
-Stagehand makes no network connections and has no analytics. It stores its
+Stage Left makes no network connections and has no analytics. It stores its
 settings in its own preferences, an app group shared with the Control Centre
-button, and a lock file in `~/Library/Application Support/Stagehand`. It changes
+button, and a lock file in `~/Library/Application Support/Stage Left`. It changes
 two system settings, and only when asked: Apple's Stage Manager switch (when you
 tell it to turn Stage Manager off) and the Dock's auto-hide (when "Hide the Dock
 while staging" is on — your own value is saved and put back).
@@ -126,7 +126,7 @@ found the hard way.
 There is no per-display state to use. The `com.apple.WindowManager` preferences
 hold one `GloballyEnabled` boolean, WindowManager only ever calls
 `setStageManagerGloballyEnabled`, and its client API can only report an app's own
-windows. So Stagehand turns Apple's version off and stages windows itself, using
+windows. So Stage Left turns Apple's version off and stages windows itself, using
 the Accessibility API.
 
 ### Tucking windows away
@@ -146,18 +146,18 @@ Tried and rejected:
 - **The window server's own move.** `SLSMoveWindow` returns error 1000 for
   another app's windows.
 - **Zero alpha.** `SLSSetWindowAlpha` works across processes, but an invisible
-  window still takes clicks, and would be unrecoverable if Stagehand died.
+  window still takes clicks, and would be unrecoverable if Stage Left died.
 
 Both mechanisms in use leave windows reachable from the Dock, so nothing can be
 lost. `NSRunningApplication.hide()` and `unhide()` report `false` even when they
-work, so Stagehand checks the real state afterwards, retries, and as a last
+work, so Stage Left checks the real state afterwards, retries, and as a last
 resort activates the app, which always brings it back into view.
 
 ### Never losing an app
 
-A hidden app that falls out of Stagehand's records becomes invisible to
+A hidden app that falls out of Stage Left's records becomes invisible to
 everything: the strip does not list it, the window scanner skips hidden apps, and
-nothing is left to unhide it. So Stagehand keeps a separate ledger, written
+nothing is left to unhide it. So Stage Left keeps a separate ledger, written
 straight to disk, of every app it has hidden, and on every pass brings back
 anything in it that it no longer accounts for. A crash is undone at the next
 launch. Apps you hide yourself with ⌘H are not in the ledger and are left alone.
@@ -166,7 +166,7 @@ launch. Apps you hide yourself with ⌘H are not in the ledger and are left alon
 
 Turning staging on takes effect at once on every selected screen, without waiting
 for a click. Each screen keeps whatever it was last used for; on a screen
-Stagehand has not seen used, it keeps the frontmost window, which the window
+Stage Left has not seen used, it keeps the frontmost window, which the window
 server already tracks in stacking order. Windows brought back any other way —
 the Dock, ⌘-Tab, Mission Control — drop out of the strip too.
 
@@ -179,14 +179,14 @@ real windows away. On top of that it only shows while the window it is staged
 around is on the Space in front of you.
 
 A full-screen app is never treated as a stage: swiping to one makes it the
-frontmost window on its display, which would otherwise make Stagehand adopt it.
+frontmost window on its display, which would otherwise make Stage Left adopt it.
 Full screen is detected by asking the window (`AXFullScreen`) rather than
 measuring it — on a notched display a full-screen window does not cover the menu
 bar area, so it is never quite screen-sized.
 
 ### One copy at a time
 
-Two copies of Stagehand, even from different folders, share preferences and fight
+Two copies of Stage Left, even from different folders, share preferences and fight
 over the same windows, each drawing its own strip on top of the other's. The app
 holds an exclusive `flock` for its lifetime; a second launch hands over to the
 running copy and exits. The kernel releases the lock when the process ends, so a
@@ -197,7 +197,7 @@ crash cannot leave it stuck. Command-line options do not take the lock.
 macOS 27 offers another app no live way to change Dock auto-hide: the private
 CoreDock calls are gone, System Events accepts `set autohide of dock preferences`
 but changes nothing, a synthesised ⌥⌘D has no effect, and the Dock does not
-reload the preference by itself. It does read it on startup, so Stagehand writes
+reload the preference by itself. It does read it on startup, so Stage Left writes
 the setting and restarts the Dock, which blinks for about a second.
 
 ### Building the Control Centre button without an Xcode project
@@ -220,7 +220,7 @@ these was needed, and most fail silently:
   register it.
 - **Share state through an app group**, since the sandboxed extension cannot read
   the app's preferences. App group names must start with the signing team, so
-  `build.sh` reads the team from your certificate (or `STAGEHAND_TEAM_ID`) and
+  `build.sh` reads the team from your certificate (or `STAGELEFT_TEAM_ID`) and
   writes the group into the entitlements and each bundle's `Info.plist`.
 
 ## Diagnostics
@@ -228,19 +228,19 @@ these was needed, and most fail silently:
 Launch the binary directly with one of these set; output goes to standard error.
 
 ```bash
-STAGEHAND_DEBUG=1 /Applications/Stagehand.app/Contents/MacOS/Stagehand
+STAGELEFT_DEBUG=1 "/Applications/Stage Left.app/Contents/MacOS/StageLeft"
 ```
 
 | Variable | What it does |
 |---|---|
-| `STAGEHAND_DEBUG=1` | Reports the menu bar item, permissions and screens |
-| `STAGEHAND_SELFTEST=1` | Dry run: what would be staged, moving nothing |
-| `STAGEHAND_LIVETEST=1` | Stages a real screen for a moment, then restores it |
-| `STAGEHAND_FSTEST=1` | Lists windows macOS reports as full screen |
-| `STAGEHAND_STRIPDUMP=1` | Reports every strip tile's icon and opacity every 2s |
-| `STAGEHAND_STRANDTEST=A,B` | Fault injection: hides app A (recorded) and B (not), then exits without cleaning up |
-| `STAGEHAND_RESCUE=list` | Lists every minimised window |
-| `STAGEHAND_RESCUE=all` | Un-minimises every window |
+| `STAGELEFT_DEBUG=1` | Reports the menu bar item, permissions and screens |
+| `STAGELEFT_SELFTEST=1` | Dry run: what would be staged, moving nothing |
+| `STAGELEFT_LIVETEST=1` | Stages a real screen for a moment, then restores it |
+| `STAGELEFT_FSTEST=1` | Lists windows macOS reports as full screen |
+| `STAGELEFT_STRIPDUMP=1` | Reports every strip tile's icon and opacity every 2s |
+| `STAGELEFT_STRANDTEST=A,B` | Fault injection: hides app A (recorded) and B (not), then exits without cleaning up |
+| `STAGELEFT_RESCUE=list` | Lists every minimised window |
+| `STAGELEFT_RESCUE=all` | Un-minimises every window |
 
 Quit the running copy first, or the second launch will hand over to it.
 
@@ -248,23 +248,23 @@ Quit the running copy first, or the second launch will hand over to it.
 
 | Path | Responsibility |
 |---|---|
-| `Sources/Stagehand/StageEngine.swift` | Decides what stays on stage and what is tucked |
-| `Sources/Stagehand/WindowScanner.swift` | Finds windows, stacking order, full-screen displays |
-| `Sources/Stagehand/AXObserverCenter.swift` | Watches every app for window activity |
-| `Sources/Stagehand/Accessibility.swift` | Wrappers over the Accessibility API |
-| `Sources/Stagehand/Geometry.swift` | The AppKit ↔ Accessibility coordinate flip |
-| `Sources/Stagehand/Display.swift` | Screens, identified by stable UUID |
-| `Sources/Stagehand/Preferences.swift` | Per-screen and app settings |
-| `Sources/Stagehand/StripController.swift` | The strip of tucked windows |
-| `Sources/Stagehand/MenuController.swift` | Menu bar item, hotkeys and app wiring |
-| `Sources/Stagehand/SettingsWindow.swift` | The settings window |
-| `Sources/Stagehand/SharedState.swift` | Master switch shared with the Control Centre button |
-| `Sources/Stagehand/CommandLineInterface.swift` | `--on`, `--off`, `--toggle` and friends |
-| `Sources/Stagehand/SingleInstance.swift` | Only one copy runs at a time |
-| `Sources/Stagehand/DockAutohide.swift` | Optional Dock hiding |
-| `Sources/Stagehand/StageManager.swift` | Reads and turns off Apple's Stage Manager |
-| `Sources/Stagehand/HotKeyCenter.swift` | Global shortcuts, no extra permission needed |
-| `Sources/Stagehand/*Test.swift`, `Rescue.swift`, `FullScreenSurvey.swift` | Diagnostics above |
+| `Sources/StageLeft/StageEngine.swift` | Decides what stays on stage and what is tucked |
+| `Sources/StageLeft/WindowScanner.swift` | Finds windows, stacking order, full-screen displays |
+| `Sources/StageLeft/AXObserverCenter.swift` | Watches every app for window activity |
+| `Sources/StageLeft/Accessibility.swift` | Wrappers over the Accessibility API |
+| `Sources/StageLeft/Geometry.swift` | The AppKit ↔ Accessibility coordinate flip |
+| `Sources/StageLeft/Display.swift` | Screens, identified by stable UUID |
+| `Sources/StageLeft/Preferences.swift` | Per-screen and app settings |
+| `Sources/StageLeft/StripController.swift` | The strip of tucked windows |
+| `Sources/StageLeft/MenuController.swift` | Menu bar item, hotkeys and app wiring |
+| `Sources/StageLeft/SettingsWindow.swift` | The settings window |
+| `Sources/StageLeft/SharedState.swift` | Master switch shared with the Control Centre button |
+| `Sources/StageLeft/CommandLineInterface.swift` | `--on`, `--off`, `--toggle` and friends |
+| `Sources/StageLeft/SingleInstance.swift` | Only one copy runs at a time |
+| `Sources/StageLeft/DockAutohide.swift` | Optional Dock hiding |
+| `Sources/StageLeft/StageManager.swift` | Reads and turns off Apple's Stage Manager |
+| `Sources/StageLeft/HotKeyCenter.swift` | Global shortcuts, no extra permission needed |
+| `Sources/StageLeft/*Test.swift`, `Rescue.swift`, `FullScreenSurvey.swift` | Diagnostics above |
 | `Extension/` | The Control Centre button |
 | `Tools/make-icon.swift` | Draws the app icon: `swift Tools/make-icon.swift` |
 

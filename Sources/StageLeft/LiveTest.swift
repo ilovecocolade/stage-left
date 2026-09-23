@@ -56,7 +56,7 @@ enum LiveTest {
     /// other than 0 while staged means the user can actually see it.
     private static func ownWindowsOnScreen() -> Int {
         let info = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] ?? []
-        return info.filter { ($0[kCGWindowOwnerName as String] as? String) == "Stagehand" }.count
+        return info.filter { ($0[kCGWindowOwnerName as String] as? String) == "Stage Left" }.count
     }
 
     private static func after(_ seconds: Double, _ block: @escaping () -> Void) {

@@ -17,7 +17,7 @@ final class Preferences {
 
     init() {
         // Version 1 stored "apply Apple's switch from this screen". Version 2
-        // means "Stagehand moves windows on this screen", which is a much
+        // means "Stage Left moves windows on this screen", which is a much
         // bigger promise — so old settings are cleared rather than reinterpreted.
         if defaults.integer(forKey: Key.schema) < 2 {
             defaults.removeObject(forKey: Key.states)
@@ -47,7 +47,7 @@ final class Preferences {
     }
 
     /// Whether the menu bar icon is shown. With it hidden the app is driven
-    /// entirely from Control Centre; opening Stagehand brings settings back.
+    /// entirely from Control Centre; opening Stage Left brings settings back.
     var showsMenuBarIcon: Bool {
         get {
             if defaults.object(forKey: Key.menuBar) == nil { return true }
@@ -69,7 +69,7 @@ final class Preferences {
         set { defaults.set(newValue, forKey: Key.active) }
     }
 
-    /// Whether Stagehand manages this screen. A screen seen for the first time
+    /// Whether Stage Left manages this screen. A screen seen for the first time
     /// is left alone — plugging in a monitor must never start rearranging
     /// windows on it unasked.
     func state(for display: Display) -> Bool {

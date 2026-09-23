@@ -1,9 +1,9 @@
-// Draws the Stagehand icon and writes Resources/AppIcon.icns and docs/logo.png.
+// Draws the Stage Left icon and writes Resources/AppIcon.icns and docs/logo.png.
 //
 //   swift Tools/make-icon.swift
 //
-// The idea: one window in the spotlight, the rest waiting in the wings — which
-// is what a stagehand looks after, one screen at a time.
+// The idea: one window in the spotlight, the rest waiting in the wings, stage
+// left — one screen at a time.
 
 import AppKit
 

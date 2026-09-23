@@ -11,10 +11,10 @@ enum SharedState {
     /// signing team, so build.sh works it out from the certificate and records
     /// it in each bundle's Info.plist rather than it being fixed in the source.
     static let suiteName: String =
-        Bundle.main.object(forInfoDictionaryKey: "StagehandAppGroup") as? String ?? "dev.stagehand.shared"
-    static let controlKind = "dev.stagehand.staging"
-    static let changed = Notification.Name("dev.stagehand.stateChanged")
-    static let showSettings = Notification.Name("dev.stagehand.showSettings")
+        Bundle.main.object(forInfoDictionaryKey: "StageLeftAppGroup") as? String ?? "io.github.ilovecocolade.stageleft.shared"
+    static let controlKind = "io.github.ilovecocolade.stageleft.staging"
+    static let changed = Notification.Name("io.github.ilovecocolade.stageleft.stateChanged")
+    static let showSettings = Notification.Name("io.github.ilovecocolade.stageleft.showSettings")
 
     private static let activeKey = "stagingActive"
 

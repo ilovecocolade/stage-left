@@ -7,9 +7,9 @@ import AppKit
 /// reproduce on demand rather than by accident.
 enum StrandTest {
     /// Pass "Recorded,Unrecorded". The first is hidden and written to the
-    /// ledger, standing in for a window Stagehand tucked. The second is hidden
+    /// ledger, standing in for a window Stage Left tucked. The second is hidden
     /// and deliberately not recorded, standing in for one the user hid with
-    /// Cmd-H — Stagehand must leave that one alone.
+    /// Cmd-H — Stage Left must leave that one alone.
     static func run(appNamed names: String) {
         let wanted = names.split(separator: ",").map(String.init)
         var recorded: [String] = []

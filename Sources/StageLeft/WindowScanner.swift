@@ -39,7 +39,7 @@ enum WindowScanner {
     ///
     /// The window server keeps this list in stacking order, which is the
     /// closest thing to "most recently used" without tracking history
-    /// ourselves — and it is already correct the moment Stagehand starts.
+    /// ourselves — and it is already correct the moment Stage Left starts.
     static func frontToBackOrder() -> [CGWindowID: Int] {
         let listed = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements],
                                                 kCGNullWindowID) as? [[String: Any]] ?? []

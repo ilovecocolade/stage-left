@@ -2,12 +2,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "Stagehand",
+    name: "StageLeft",
     platforms: [.macOS(.v14)],
     targets: [
         .executableTarget(
-            name: "Stagehand",
-            path: "Sources/Stagehand",
+            name: "StageLeft",
+            path: "Sources/StageLeft",
             linkerSettings: [.linkedFramework("Carbon")]
         )
     ]

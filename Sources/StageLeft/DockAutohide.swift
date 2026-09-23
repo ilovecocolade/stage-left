@@ -29,11 +29,11 @@ enum DockAutohide {
 
 /// Hides the Dock while staging is on, and hands it back exactly as it was.
 ///
-/// The user's own setting is saved the moment Stagehand takes the Dock over and
+/// The user's own setting is saved the moment Stage Left takes the Dock over and
 /// put back when staging stops. It is kept on disk, so a crash while the Dock
 /// is hidden is undone at the next launch.
 final class DockController {
-    private static let savedKey = "dockAutohideBeforeStagehand"
+    private static let savedKey = "dockAutohideBeforeStageLeft"
     private let defaults = UserDefaults.standard
 
     /// Safe to call on every state change: it only acts on a transition.

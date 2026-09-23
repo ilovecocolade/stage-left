@@ -29,7 +29,7 @@ final class HotKeyCenter {
         let status = RegisterEventHotKey(UInt32(keyCode), modifiers, hotKeyID,
                                          GetEventDispatcherTarget(), 0, &ref)
         guard status == noErr else {
-            NSLog("Stagehand: could not register hotkey \(keyCode) (OSStatus \(status))")
+            NSLog("Stage Left: could not register hotkey \(keyCode) (OSStatus \(status))")
             return
         }
 

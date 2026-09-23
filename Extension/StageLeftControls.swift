@@ -8,16 +8,16 @@ import WidgetKit
 /// applies to is chosen in the app's menu, and stays there — a Control Centre
 /// button has room for one decision, not a list of monitors.
 @main
-struct StagehandControl: ControlWidget {
+struct StageLeftControl: ControlWidget {
     var body: some ControlWidgetConfiguration {
         StaticControlConfiguration(kind: SharedState.controlKind, provider: StagingProvider()) { isStaging in
-            ControlWidgetToggle("Stagehand", isOn: isStaging, action: SetStagingIntent()) { on in
+            ControlWidgetToggle("Stage Left", isOn: isStaging, action: SetStagingIntent()) { on in
                 Label(on ? "Staging" : "Off",
                       systemImage: on ? "rectangle.stack.fill" : "rectangle.stack")
             }
         }
-        .displayName("Stagehand")
-        .description("Stage windows on the screens you picked in Stagehand.")
+        .displayName("Stage Left")
+        .description("Stage windows on the screens you picked in Stage Left.")
     }
 }
 

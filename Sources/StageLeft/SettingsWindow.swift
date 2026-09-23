@@ -2,7 +2,7 @@ import AppKit
 import ServiceManagement
 import SwiftUI
 
-/// The small window you get when you open Stagehand.
+/// The small window you get when you open Stage Left.
 ///
 /// It is the only way back once the menu bar icon is hidden, so opening the app
 /// again always brings it up.
@@ -23,7 +23,7 @@ final class SettingsWindowController {
         if window == nil {
             let hosting = NSHostingController(rootView: SettingsView(actions: actions))
             let window = NSWindow(contentViewController: hosting)
-            window.title = "Stagehand"
+            window.title = "Stage Left"
             window.styleMask = [.titled, .closable]
             window.isReleasedWhenClosed = false
             window.center()
@@ -87,12 +87,12 @@ private struct SettingsView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            Toggle("Show Stagehand in the menu bar", isOn: toggle(
+            Toggle("Show Stage Left in the menu bar", isOn: toggle(
                 get: { actions.preferences.showsMenuBarIcon },
                 set: { actions.preferences.showsMenuBarIcon = $0 }))
 
             if !actions.preferences.showsMenuBarIcon {
-                Text("Open Stagehand from Applications to get this window back.")
+                Text("Open Stage Left from Applications to get this window back.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
@@ -113,7 +113,7 @@ private struct SettingsView: View {
                 }
                 .disabled(actions.tuckedCount() == 0)
                 Spacer()
-                Button("Quit Stagehand") { NSApp.terminate(nil) }
+                Button("Quit Stage Left") { NSApp.terminate(nil) }
             }
         }
         .padding(20)

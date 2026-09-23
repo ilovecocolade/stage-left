@@ -1,7 +1,7 @@
 import AppKit
 import ApplicationServices
 
-/// A window Stagehand is willing to take off stage.
+/// A window Stage Left is willing to take off stage.
 struct ManagedWindow {
     let id: CGWindowID
     let pid: pid_t
@@ -25,7 +25,7 @@ struct ManagedWindow {
 /// macOS so it stays partly visible, and the window server refuses
 /// cross-process moves. Setting window alpha to zero does work, but an
 /// invisible window still swallows clicks and would be unrecoverable if
-/// Stagehand died. Both of these leave the window in the Dock.
+/// Stage Left died. Both of these leave the window in the Dock.
 enum TuckMethod: String {
     /// The whole app was hidden — instant, with no animation at all. Only safe
     /// when every one of that app's windows is on this display.
@@ -35,7 +35,7 @@ enum TuckMethod: String {
     case minimized
 }
 
-/// A window Stagehand has taken off stage, and what it needs to bring it back.
+/// A window Stage Left has taken off stage, and what it needs to bring it back.
 struct TuckedWindow {
     let id: CGWindowID
     let pid: pid_t

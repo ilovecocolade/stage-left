@@ -13,12 +13,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.shutDown()
     }
 
-    /// Opening Stagehand shows settings — the only way back to them once the
+    /// Opening Stage Left shows settings — the only way back to them once the
     /// menu bar icon is hidden.
     ///
     /// This fires when the app is opened from Finder, Spotlight or the Dock,
     /// whether or not it was already running. Starting at login does not send
-    /// it, so Stagehand comes up silently every morning.
+    /// it, so Stage Left comes up silently every morning.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         controller.showSettings()
         return true

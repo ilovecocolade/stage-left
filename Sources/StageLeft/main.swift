@@ -5,7 +5,7 @@ if CommandLineInterface.handle(Array(CommandLine.arguments.dropFirst())) {
     exit(0)
 }
 
-// Opening Stagehand while it is already running should show its settings, not
+// Opening Stage Left while it is already running should show its settings, not
 // start a rival copy. Hand over to the running one and bow out.
 guard SingleInstance.claim() else {
     SharedState.requestSettings()

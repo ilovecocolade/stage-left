@@ -1,6 +1,6 @@
 import Foundation
 
-/// Makes sure only one Stagehand menu bar app runs at a time.
+/// Makes sure only one Stage Left menu bar app runs at a time.
 ///
 /// Two copies, even from different folders, share the same preferences and
 /// fight over the same windows: each hides what the other restores, each keeps
@@ -11,10 +11,10 @@ import Foundation
 enum SingleInstance {
     private static var descriptor: Int32 = -1
 
-    /// True if this process is now the one Stagehand.
+    /// True if this process is now the one Stage Left.
     static func claim() -> Bool {
         let folder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Stagehand", isDirectory: true)
+            .appendingPathComponent("Stage Left", isDirectory: true)
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
 
         descriptor = open(folder.appendingPathComponent("instance.lock").path, O_CREAT | O_RDWR, 0o600)

@@ -1,7 +1,7 @@
 import AppKit
 import ApplicationServices
 
-/// Stagehand's own Stage Manager.
+/// Stage Left's own Stage Manager.
 ///
 /// On a display the user has marked as managed, only the focused window — and,
 /// by default, its app's other windows there — stays on screen. Everything else
@@ -249,7 +249,7 @@ final class StageEngine {
 
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
                 guard let app = NSRunningApplication(processIdentifier: pid), app.isHidden else { return }
-                NSLog("Stagehand: %@ stayed hidden, activating to recover",
+                NSLog("Stage Left: %@ stayed hidden, activating to recover",
                       app.localizedName ?? "an app")
                 app.activate()
             }
@@ -263,7 +263,7 @@ final class StageEngine {
         onStateChange?()
     }
 
-    /// Unhides every hidden app, whether or not Stagehand hid it. The manual
+    /// Unhides every hidden app, whether or not Stage Left hid it. The manual
     /// way out if apps have gone missing.
     @discardableResult
     func unhideEverything() -> [String] {
@@ -288,7 +288,7 @@ final class StageEngine {
     /// could leave apps hidden and windows minimised. Both are still reachable
     /// from the Dock, and both lists are written after every change and undone
     /// at the next launch.
-    /// Every app Stagehand has hidden, held separately from `tucked`.
+    /// Every app Stage Left has hidden, held separately from `tucked`.
     ///
     /// A hidden app that falls out of `tucked` — a stale prune, a lost entry —
     /// becomes invisible to everything: the strip does not list it, the window
