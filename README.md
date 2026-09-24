@@ -35,16 +35,47 @@ and collects nothing.
 
 ## Requirements
 
-- macOS 14 or later. Developed and tested on macOS 27 with two displays.
+- macOS 14 or later on a Mac with Apple silicon. Developed and tested on
+  macOS 27 with two displays. The Control Centre button needs macOS 26 or later.
 - **Accessibility permission**, which macOS asks for on first launch. Stage Left
   needs it to hide, minimise and restore other apps' windows, and uses it for
   nothing else.
 - To build: Xcode Command Line Tools. The Control Centre button additionally
-  needs a full Xcode matching your macOS version.
+  needs a full Xcode.
 
 ## Install
 
-There are no prebuilt releases yet; build from source:
+1. Download **Stage-Left-1.0.zip** from the
+   [latest release](https://github.com/ilovecocolade/stage-left/releases/latest)
+   and open it to unzip.
+2. Drag **Stage Left** into your **Applications** folder. The Control Centre
+   button only works from there.
+3. Open Stage Left. macOS blocks it the first time: open **System Settings →
+   Privacy & Security**, find the message about Stage Left, click
+   **Open Anyway** and confirm.
+4. Grant **Accessibility** permission when macOS asks.
+
+Releases are signed ad-hoc — anonymously — rather than with a paid Apple
+Developer ID, so macOS cannot check who made the app or tell one release from
+the next. That is why step 3 is needed. If you prefer Terminal, this does the
+same:
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/Stage Left.app"
+```
+
+It also means **Accessibility must be granted again after each update**: remove
+Stage Left from System Settings → Privacy & Security → Accessibility, then add it
+back.
+
+Each release lists the zip's SHA-256 checksum. To check your download against
+it:
+
+```bash
+shasum -a 256 ~/Downloads/Stage-Left-1.0.zip
+```
+
+### Build from source
 
 ```bash
 git clone https://github.com/ilovecocolade/stage-left.git
@@ -64,6 +95,11 @@ Accessibility permission you granted. Without a certificate the app still works,
 but you will have to grant the permission again after each build — and if it ever
 claims to need permission you have already given, remove Stage Left from System
 Settings → Privacy & Security → Accessibility and add it again.
+
+`./build.sh --package` builds a release download instead of installing. It
+signs ad-hoc, since a development certificate would name its owner in every
+copy; strips debug information, which records the folder it was built in; and
+writes the zip and its checksum to `build/release`. It needs a full Xcode.
 
 ## Using it
 
@@ -87,7 +123,7 @@ if it is on, since the two fight over the same windows.
 
 Open Control Centre, click **Edit Controls**, remove **Stage Manager** and add
 **Stage Left**. Turn on **Open at Login** as well: the button only works while the
-app is running. The button is a single on/off switch; which screens it applies to
+app is running, and shows off when it is not. The button is a single on/off switch; which screens it applies to
 is chosen in the app.
 
 ### From the command line
@@ -111,8 +147,8 @@ Stage Left from anywhere.
 ## Privacy
 
 Stage Left makes no network connections and has no analytics. It stores its
-settings in its own preferences, an app group shared with the Control Centre
-button, and a lock file in `~/Library/Application Support/Stage Left`. It changes
+settings in its own preferences and a lock file in
+`~/Library/Application Support/Stage Left`. It changes
 two system settings, and only when asked: Apple's Stage Manager switch (when you
 tell it to turn Stage Manager off) and the Dock's auto-hide (when "Hide the Dock
 while staging" is on — your own value is saved and put back).
@@ -207,7 +243,6 @@ the setting and restarts the Dock, which blinks for about a second.
 (it checks `DEVELOPER_DIR`, `Xcode.app`, then `Xcode-beta.app`). Every one of
 these was needed, and most fail silently:
 
-- **The SDK must match the running OS**, which rules out Command Line Tools.
 - **`appintentsmetadataprocessor` (Xcode only) must produce
   `Metadata.appintents`.** Without it the extension registers but never appears
   in the Control Centre gallery. The Swift compile needs `-wmo`, or no
@@ -219,10 +254,13 @@ these was needed, and most fail silently:
   registered but the widget daemon never launches it.
 - **Sandbox the extension.** Without the sandbox entitlement macOS will not
   register it.
-- **Share state through an app group**, since the sandboxed extension cannot read
-  the app's preferences. App group names must start with the signing team, so
-  `build.sh` reads the team from your certificate (or `STAGELEFT_TEAM_ID`) and
-  writes the group into the entitlements and each bundle's `Info.plist`.
+- **Reach the app through Darwin notifications, not an app group.** The
+  sandboxed extension cannot read the app's preferences. An app group would
+  share them, but only between apps signed by a paid developer team: signed
+  ad-hoc, the app's writes fail and the extension reads nothing. Instead the app
+  publishes the switch as a notification's state (`notify_set_state`), which the
+  extension reads instantly, and the extension posts a request to change it.
+  notifyd drops the state when the app quits, so the button then reads off.
 
 ### Guarding the Accessibility permission
 
@@ -280,7 +318,7 @@ Quit the running copy first, or the second launch will hand over to it.
 | `Sources/StageLeft/StripController.swift` | The strip of tucked windows |
 | `Sources/StageLeft/MenuController.swift` | Menu bar item, hotkeys and app wiring |
 | `Sources/StageLeft/SettingsWindow.swift` | The settings window |
-| `Sources/StageLeft/SharedState.swift` | Master switch shared with the Control Centre button |
+| `Sources/StageLeft/SharedState.swift` | The master switch, and how the Control Centre button reaches it |
 | `Sources/StageLeft/CommandLineInterface.swift` | `--on`, `--off`, `--toggle` and friends |
 | `Sources/StageLeft/SingleInstance.swift` | Only one copy runs at a time |
 | `Sources/StageLeft/DockAutohide.swift` | Optional Dock hiding |

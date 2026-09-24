@@ -4,8 +4,8 @@ import WidgetKit
 
 /// The Control Centre button.
 ///
-/// It flips one master switch shared with the app. Which screens that switch
-/// applies to is chosen in the app's menu, and stays there — a Control Centre
+/// It flips the app's master switch. Which screens that switch applies to is
+/// chosen in the app's menu, and stays there — a Control Centre
 /// button has room for one decision, not a list of monitors.
 @main
 struct StageLeftControl: ControlWidget {
@@ -21,16 +21,17 @@ struct StageLeftControl: ControlWidget {
     }
 }
 
-/// Reads the switch each time Control Centre draws the button.
+/// Reads the switch each time Control Centre draws the button. Off whenever
+/// the app is not running, since nothing is being staged then.
 struct StagingProvider: ControlValueProvider {
     let previewValue = true
 
     func currentValue() async throws -> Bool {
-        SharedState.isStaging
+        SharedState.publishedState
     }
 }
 
-/// Writes the switch, then tells the app to act on it.
+/// Asks the running app to flip the switch.
 struct SetStagingIntent: SetValueIntent {
     static let title: LocalizedStringResource = "Stage selected screens"
 
@@ -38,8 +39,7 @@ struct SetStagingIntent: SetValueIntent {
     var value: Bool
 
     func perform() async throws -> some IntentResult {
-        SharedState.isStaging = value
-        SharedState.announceChange()
+        await SharedState.request(value)
         return .result()
     }
 }

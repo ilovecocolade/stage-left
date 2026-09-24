@@ -1,49 +1,100 @@
 import Foundation
+import notify
 
-/// The handful of things the app and its Control Centre extension both need.
+/// How the app, its command line and its Control Centre button talk.
 ///
-/// They are separate processes, so this is deliberately the smallest possible
-/// surface: one boolean, one notification, and the names they agree on. The
-/// per-screen settings stay private to the app.
+/// The command line is the app's own binary, so the two share the app's
+/// preferences and signal each other with distributed notifications.
+///
+/// The button is a separate, sandboxed process that cannot read those
+/// preferences. It reaches the running app over Darwin notifications instead:
+/// the app publishes whether it is staging as a notification's state, and the
+/// button posts a request to change it. An app group could share the
+/// preferences directly, but only for apps signed by a paid developer team;
+/// this works however the app is signed, including the anonymous downloads.
 enum SharedState {
-    /// An app group, because the Control Centre extension is sandboxed and
-    /// cannot otherwise see the app's preferences. Its name must start with the
-    /// signing team, so build.sh works it out from the certificate and records
-    /// it in each bundle's Info.plist rather than it being fixed in the source.
-    static let suiteName: String =
-        Bundle.main.object(forInfoDictionaryKey: "StageLeftAppGroup") as? String ?? "io.github.ilovecocolade.stageleft.shared"
-    static let controlKind = "io.github.ilovecocolade.stageleft.staging"
-    static let changed = Notification.Name("io.github.ilovecocolade.stageleft.stateChanged")
-    static let showSettings = Notification.Name("io.github.ilovecocolade.stageleft.showSettings")
+    private static let prefix = "io.github.ilovecocolade.stageleft"
+    static let controlKind = "\(prefix).staging"
 
-    private static let activeKey = "stagingActive"
+    /// The master switch changed; the running app should act on it.
+    static let changed = Notification.Name("\(prefix).stateChanged")
+    /// A second launch asking the running app to show its settings.
+    static let showSettings = Notification.Name("\(prefix).showSettings")
+
+    private static let activeKey = "stagingActive" as CFString
 
     /// The master switch. Off means every screen is left alone, whatever it is
-    /// individually set to. Defaults to on so the app works out of the box.
-    ///
-    /// Read through CFPreferences rather than UserDefaults: the two processes
-    /// write this independently, and only an explicit synchronise reliably
-    /// picks up a change made by the other one.
+    /// individually set to. Read through CFPreferences with an explicit
+    /// synchronise so the app always sees the command line's writes.
     static var isStaging: Bool {
         get {
-            CFPreferencesAppSynchronize(suiteName as CFString)
-            return CFPreferencesCopyAppValue(activeKey as CFString, suiteName as CFString) as? Bool ?? true
+            CFPreferencesAppSynchronize(kCFPreferencesCurrentApplication)
+            return CFPreferencesCopyAppValue(activeKey, kCFPreferencesCurrentApplication) as? Bool ?? true
         }
         set {
-            CFPreferencesSetAppValue(activeKey as CFString, newValue as CFBoolean, suiteName as CFString)
-            CFPreferencesAppSynchronize(suiteName as CFString)
+            CFPreferencesSetAppValue(activeKey, newValue as CFBoolean, kCFPreferencesCurrentApplication)
+            CFPreferencesAppSynchronize(kCFPreferencesCurrentApplication)
         }
     }
 
-    /// Asks the running menu bar app to bring up its settings window.
-    static func requestSettings() {
+    /// Tells the running app the switch moved.
+    static func announceChange() { post(changed) }
+
+    /// Asks the running app to bring up its settings window.
+    static func requestSettings() { post(showSettings) }
+
+    private static func post(_ name: Notification.Name) {
         DistributedNotificationCenter.default().postNotificationName(
-            showSettings, object: nil, userInfo: nil, deliverImmediately: true)
+            name, object: nil, userInfo: nil, deliverImmediately: true)
     }
 
-    /// Tells the other process the switch moved.
-    static func announceChange() {
-        DistributedNotificationCenter.default().postNotificationName(
-            changed, object: nil, userInfo: nil, deliverImmediately: true)
+    // MARK: - The Control Centre button
+
+    /// Holds 1 while the running app is staging. notifyd keeps the value only
+    /// while the app is registered for it, so it reads 0 once the app quits.
+    private static let stateName = "\(prefix).state"
+    private static let requestOnName = "\(prefix).request.on"
+    private static let requestOffName = "\(prefix).request.off"
+
+    /// The app's registration for `stateName`, held for its lifetime.
+    private static let stateToken: Int32 = {
+        var token: Int32 = 0
+        notify_register_check(stateName, &token)
+        return token
+    }()
+
+    /// The app: tells the button whether it is staging.
+    static func publish(_ on: Bool) {
+        notify_set_state(stateToken, on ? 1 : 0)
+        notify_post(stateName)
+    }
+
+    /// The app: acts on the button's requests, on the main queue.
+    static func onRequest(_ handler: @escaping (Bool) -> Void) {
+        for (name, on) in [(requestOnName, true), (requestOffName, false)] {
+            var token: Int32 = 0 // Never cancelled: the app listens for its lifetime.
+            notify_register_dispatch(name, &token, DispatchQueue.main) { _ in handler(on) }
+        }
+    }
+
+    /// The button: whether the running app says it is staging.
+    static var publishedState: Bool {
+        var token: Int32 = 0
+        guard notify_register_check(stateName, &token) == NOTIFY_STATUS_OK else { return false }
+        defer { notify_cancel(token) }
+        var state: UInt64 = 0
+        notify_get_state(token, &state)
+        return state == 1
+    }
+
+    /// The button: asks the app to switch staging on or off, then waits up to a
+    /// second for it to answer, so Control Centre redraws with the result. If
+    /// the app is not running nothing answers, and the button falls back to off.
+    static func request(_ on: Bool) async {
+        notify_post(on ? requestOnName : requestOffName)
+        for _ in 0..<50 {
+            if publishedState == on { return }
+            try? await Task.sleep(for: .milliseconds(20))
+        }
     }
 }

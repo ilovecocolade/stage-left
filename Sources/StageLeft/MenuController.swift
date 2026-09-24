@@ -40,11 +40,19 @@ final class MenuController: NSObject, NSMenuDelegate {
             self, selector: #selector(screensChanged),
             name: NSApplication.didChangeScreenParametersNotification, object: nil)
 
-        // The Control Centre button lives in another process and flips the same
-        // switch, so react when it does.
+        // The command line and the settings window flip the master switch in
+        // the preferences, then announce it.
         DistributedNotificationCenter.default().addObserver(
             self, selector: #selector(sharedStateChanged),
             name: SharedState.changed, object: nil)
+
+        // The Control Centre button is sandboxed away from the preferences, so
+        // it asks instead, and reads back what publishControlState reports.
+        SharedState.onRequest { [weak self] on in
+            SharedState.isStaging = on
+            self?.sharedStateChanged()
+        }
+        publishControlState()
 
         // A second launch hands over to this one rather than running alongside.
         DistributedNotificationCenter.default().addObserver(
@@ -152,25 +160,24 @@ final class MenuController: NSObject, NSMenuDelegate {
         #if DEBUG
         if ProcessInfo.processInfo.environment["STAGELEFT_DEBUG"] != nil {
             FileHandle.standardError.write(Data(
-                "control changed staging to \(SharedState.isStaging ? "on" : "off")\n".utf8))
+                "staging switched \(SharedState.isStaging ? "on" : "off")\n".utf8))
         }
         #endif
-        engine.evaluate()
-        refreshIcon()
-    }
-
-    @objc private func toggleStaging() {
-        SharedState.isStaging.toggle()
         engine.evaluate()
         refreshIcon()
         publishControlState()
     }
 
-    /// Keeps the Control Centre button in step when the change came from here.
+    @objc private func toggleStaging() {
+        SharedState.isStaging.toggle()
+        sharedStateChanged()
+    }
+
+    /// Keeps the Control Centre button in step, wherever the change came from.
     /// Control Centre buttons only exist on macOS 26 and later; everything else
     /// in the app works without them.
     private func publishControlState() {
-        SharedState.announceChange()
+        SharedState.publish(SharedState.isStaging)
         if #available(macOS 26.0, *) {
             ControlCenter.shared.reloadControls(ofKind: SharedState.controlKind)
         }
