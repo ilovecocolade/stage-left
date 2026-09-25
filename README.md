@@ -113,8 +113,9 @@ Open Stage Left and tick the screens to stage. From then on:
 | `⌥⌘1` … `⌥⌘9` | Stage or release that screen |
 | `⌥⌘S` | Bring back every tucked window |
 
-Opening Stage Left while it is running brings up its settings. That is also how
-you get back to them if you hide the menu bar icon.
+Opening Stage Left while it is running brings up its settings, and so does the
+small gear at the foot of the strip. Either way gets you back to them if you hide
+the menu bar icon.
 
 Stage Left turns off Apple's own Stage Manager when you ask it to, and warns you
 if it is on, since the two fight over the same windows.

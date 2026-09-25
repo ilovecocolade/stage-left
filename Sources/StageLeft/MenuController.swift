@@ -28,6 +28,7 @@ final class MenuController: NSObject, NSMenuDelegate {
             self?.updateDock()
         }
         strip.onSelect = { [weak self] id in self?.bringBack(id) }
+        strip.onSettings = { [weak self] in self?.showSettings() }
 
         registerHotKeys()
         reloadDisplays()

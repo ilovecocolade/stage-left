@@ -10,6 +10,8 @@ final class StripController {
 
     /// Called with the window the user picked out of the strip.
     var onSelect: ((CGWindowID) -> Void)?
+    /// Called when the user clicks the settings button under the icons.
+    var onSettings: (() -> Void)?
 
     func update(_ contents: [(display: Display, windows: [TuckedWindow])]) {
         var seen = Set<String>()
@@ -21,7 +23,8 @@ final class StripController {
             if let panel = panels[display.id] {
                 panel.apply(windows: windows, screen: screen)
             } else {
-                let panel = StripPanel { [weak self] id in self?.onSelect?(id) }
+                let panel = StripPanel(onSelect: { [weak self] id in self?.onSelect?(id) },
+                                       onSettings: { [weak self] in self?.onSettings?() })
                 panels[display.id] = panel
                 panel.apply(windows: windows, screen: screen)
                 panel.appear()
@@ -60,6 +63,9 @@ private final class StripPanel {
         static let padding: CGFloat = 3
         static let corner: CGFloat = 14
         static var width: CGFloat { tile + padding * 2 }
+        /// The settings button's row under the icons, and the gear inside it.
+        static let footer = NSSize(width: 26, height: 16)
+        static let gear: CGFloat = 10
 
         static let fade = 0.16
         static let reflow = 0.20
@@ -76,7 +82,7 @@ private final class StripPanel {
     private let onSelect: (CGWindowID) -> Void
     private var shownIDs: [CGWindowID] = []
 
-    init(onSelect: @escaping (CGWindowID) -> Void) {
+    init(onSelect: @escaping (CGWindowID) -> Void, onSettings: @escaping () -> Void) {
         self.onSelect = onSelect
 
         panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: Metrics.width, height: Metrics.width),
@@ -117,6 +123,16 @@ private final class StripPanel {
         content.addSubview(background)
         content.addSubview(items)
         panel.contentView = content
+
+        // Pinned to the bottom centre, so it stays put as the panel resizes.
+        // Added only once the content view has the panel's size: autoresizing
+        // keeps its margins in proportion, and grown from zero they go wrong.
+        let settings = StripSettingsButton(action: onSettings)
+        settings.frame = NSRect(origin: NSPoint(x: content.bounds.midX - Metrics.footer.width / 2,
+                                                y: Metrics.padding),
+                                size: Metrics.footer)
+        settings.autoresizingMask = [.minXMargin, .maxXMargin, .maxYMargin]
+        content.addSubview(settings)
         panel.hasShadow = false
     }
 
@@ -125,7 +141,7 @@ private final class StripPanel {
     func apply(windows: [TuckedWindow], screen: NSScreen) {
         let height = CGFloat(windows.count) * Metrics.tile
             + CGFloat(max(0, windows.count - 1)) * Metrics.spacing
-            + Metrics.padding * 2
+            + Metrics.padding * 2 + Metrics.footer.height
         let visible = screen.visibleFrame
         let frame = NSRect(x: visible.minX + Metrics.padding,
                            y: visible.midY - height / 2,
@@ -229,25 +245,94 @@ private final class StripPanel {
     }
 }
 
+// MARK: - Clickable spots
+
+/// Anything in the strip that lights up under the pointer.
+private class StripHoverView: NSView {
+    private var isHovered = false { didSet { updateHighlight() } }
+
+    init(cornerRadius: CGFloat) {
+        super.init(frame: .zero)
+        wantsLayer = true
+        layer?.cornerRadius = cornerRadius
+        layer?.cornerCurve = .continuous
+        layer?.backgroundColor = .clear
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        // The panel is never key, so the tracking area has to stay live anyway.
+        addTrackingArea(NSTrackingArea(rect: bounds,
+                                       options: [.mouseEnteredAndExited, .activeAlways],
+                                       owner: self))
+    }
+
+    override func mouseEntered(with event: NSEvent) { isHovered = true }
+    override func mouseExited(with event: NSEvent) { isHovered = false }
+
+    private func updateHighlight() {
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.12
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            context.allowsImplicitAnimation = true
+            layer?.backgroundColor = isHovered
+                ? NSColor.labelColor.withAlphaComponent(0.12).cgColor
+                : NSColor.clear.cgColor
+        }
+    }
+}
+
+/// The small gear under the icons, which opens Stage Left's settings.
+private final class StripSettingsButton: StripHoverView {
+    private let action: () -> Void
+
+    init(action: @escaping () -> Void) {
+        self.action = action
+        super.init(cornerRadius: StripPanel.Metrics.footer.height / 2)
+
+        let gear = NSImageView()
+        gear.image = NSImage(systemSymbolName: "gearshape.fill", accessibilityDescription: nil)?
+            .withSymbolConfiguration(.init(pointSize: StripPanel.Metrics.gear, weight: .semibold))
+        gear.contentTintColor = .secondaryLabelColor
+        gear.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(gear)
+        NSLayoutConstraint.activate([
+            gear.centerXAnchor.constraint(equalTo: centerXAnchor),
+            gear.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
+
+        toolTip = "Stage Left Settings"
+        setAccessibilityElement(true)
+        setAccessibilityRole(.button)
+        setAccessibilityLabel("Stage Left Settings")
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    override func mouseDown(with event: NSEvent) { action() }
+
+    override func accessibilityPerformPress() -> Bool {
+        action()
+        return true
+    }
+}
+
 // MARK: - One icon
 
-private final class StripItemView: NSView {
+private final class StripItemView: StripHoverView {
     let windowID: CGWindowID
     /// Set while the view is fading out and awaiting removal.
     var isLeaving = false
     private let action: (CGWindowID) -> Void
     private let iconView = NSImageView()
-    private var isHovered = false { didSet { updateHighlight() } }
 
     init(window: TuckedWindow, action: @escaping (CGWindowID) -> Void) {
         self.windowID = window.id
         self.action = action
-        super.init(frame: .zero)
-
-        wantsLayer = true
-        layer?.cornerRadius = 12
-        layer?.cornerCurve = .continuous
-        layer?.backgroundColor = .clear
+        super.init(cornerRadius: 12)
 
         iconView.imageScaling = .scaleProportionallyUpOrDown
         iconView.translatesAutoresizingMaskIntoConstraints = false
@@ -275,36 +360,13 @@ private final class StripItemView: NSView {
 
     required init?(coder: NSCoder) { fatalError("not used") }
 
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        trackingAreas.forEach(removeTrackingArea)
-        // The panel is never key, so the tracking area has to stay live anyway.
-        addTrackingArea(NSTrackingArea(rect: bounds,
-                                       options: [.mouseEnteredAndExited, .activeAlways],
-                                       owner: self))
-    }
-
     var hasNoIcon: Bool { iconView.image == nil }
 
     func report() -> String {
         "\(iconView.image == nil ? "NO-ICON" : "icon")@\(String(format: "%.2f", alphaValue))\(isLeaving ? "/leaving" : "")"
     }
 
-    override func mouseEntered(with event: NSEvent) { isHovered = true }
-    override func mouseExited(with event: NSEvent) { isHovered = false }
-
     override func mouseDown(with event: NSEvent) {
         action(windowID)
-    }
-
-    private func updateHighlight() {
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.12
-            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            context.allowsImplicitAnimation = true
-            layer?.backgroundColor = isHovered
-                ? NSColor.labelColor.withAlphaComponent(0.12).cgColor
-                : NSColor.clear.cgColor
-        }
     }
 }
