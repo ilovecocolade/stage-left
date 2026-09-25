@@ -19,7 +19,7 @@ esac
 APP="build/Stage Left.app"
 APPEX="$APP/Contents/PlugIns/StageLeftControls.appex"
 BUNDLE_ID="${STAGELEFT_BUNDLE_ID:-io.github.ilovecocolade.stageleft}"
-VERSION="1.0"
+VERSION="1.1"
 LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
 
 # --- Signing identity ---------------------------------------------------------

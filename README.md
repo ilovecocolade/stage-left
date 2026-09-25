@@ -45,7 +45,7 @@ and collects nothing.
 
 ## Install
 
-1. Download **Stage-Left-1.0.zip** from the
+1. Download the **Stage-Left** zip from the
    [latest release](https://github.com/ilovecocolade/stage-left/releases/latest)
    and open it to unzip.
 2. Drag **Stage Left** into your **Applications** folder. The Control Centre
@@ -72,7 +72,7 @@ Each release lists the zip's SHA-256 checksum. To check your download against
 it:
 
 ```bash
-shasum -a 256 ~/Downloads/Stage-Left-1.0.zip
+shasum -a 256 ~/Downloads/Stage-Left-*.zip
 ```
 
 ### Build from source
