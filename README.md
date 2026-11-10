@@ -317,6 +317,7 @@ to a release build with a plain `./build.sh`.
 | `STAGELEFT_LIVETEST=1` | Stages a real screen for a moment, then restores it |
 | `STAGELEFT_FSTEST=1` | Lists windows macOS reports as full screen |
 | `STAGELEFT_LINKTEST=1` | Links the staged window with one from the strip, then unlinks it |
+| `STAGELEFT_POPUPTEST=1` | Checks a popup in a linked app keeps the group on stage; needs `Tools/popup-helper.swift` running |
 | `STAGELEFT_STRIPDUMP=1` | Reports every strip tile's icon and opacity every 2s |
 | `STAGELEFT_STRANDTEST=A,B` | Fault injection: hides app A (recorded) and B (not), then exits without cleaning up |
 | `STAGELEFT_RESCUE=list` | Lists every minimised window |
@@ -347,6 +348,7 @@ Quit the running copy first, or the second launch will hand over to it.
 | `Sources/StageLeft/*Test.swift`, `Rescue.swift`, `FullScreenSurvey.swift` | Diagnostics above |
 | `Extension/` | The Control Centre button |
 | `Tools/make-icon.swift` | Draws the app icon: `swift Tools/make-icon.swift` |
+| `Tools/popup-helper.swift` | Stand-in app that opens a popup, for `STAGELEFT_POPUPTEST` |
 
 ## Licence
 

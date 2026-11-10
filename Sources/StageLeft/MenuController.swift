@@ -519,6 +519,7 @@ final class MenuController: NSObject, NSMenuDelegate {
         if let argument = environment["STAGELEFT_RESCUE"] { Rescue.run(argument: argument) }
         if environment["STAGELEFT_FSTEST"] != nil { FullScreenSurvey.run() }
         if environment["STAGELEFT_LINKTEST"] != nil { LinkTest.run(engine: engine) }
+        if environment["STAGELEFT_POPUPTEST"] != nil { PopupTest.run(engine: engine) }
         if let target = environment["STAGELEFT_STRANDTEST"] { StrandTest.run(appNamed: target) }
         if environment["STAGELEFT_STRIPDUMP"] != nil {
             Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in

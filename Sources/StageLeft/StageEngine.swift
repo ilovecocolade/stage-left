@@ -194,10 +194,11 @@ final class StageEngine {
         // Space, and staging around that would empty this desktop.
         let visible = WindowScanner.visibleWindows(of: apps)
             .filter { tucked[$0.id] == nil && snapshot.onScreenIDs.contains($0.id) }
+        let order = snapshot.frontToBackOrder
         let onStage = focused.flatMap { snapshot.onScreenIDs.contains($0.id) ? $0 : nil }
+            .map { stageWindow(for: $0, among: visible, order: order) }
         let focusedDisplay = onStage.flatMap { Geometry.display(containing: $0.axFrame, among: displays) }
 
-        let order = snapshot.frontToBackOrder
         let fullScreen = WindowScanner.displaysWithFullScreenWindow(of: apps, among: displays, in: snapshot)
         fullScreenDisplays = fullScreen
 
@@ -236,14 +237,17 @@ final class StageEngine {
             emptiedStages.remove(display.id)
             lastLead[display.id] = lead.id
             leadElements[display.id] = lead.element
-            if lead.id == onStage?.id { focusedStage = (lead, display) }
+            // No link button while a popup has focus: it belongs to the window.
+            if lead.id == focused?.id { focusedStage = (lead, display) }
 
             var keep: Set<CGWindowID> = [lead.id]
             if prefs.groupsByApp {
                 keep.formUnion(onDisplay.filter { $0.pid == lead.pid }.map(\.id))
                 keep.formUnion(tuckedWindows(on: display).filter { $0.pid == lead.pid }.map(\.id))
             }
-            keep.formUnion(links.group(of: lead.id))
+            // A linked window goes wherever its partners go, so an app's other
+            // windows kept above bring theirs too. Iterates a copy of `keep`.
+            for id in keep { keep.formUnion(links.group(of: id)) }
             stageWindows[display.id] = onDisplay.filter { keep.contains($0.id) }
 
             for window in tuckedWindows(on: display) where keep.contains(window.id) {
@@ -255,6 +259,21 @@ final class StageEngine {
         persist()
         reconcileHiddenApps()
         onStateChange?()
+    }
+
+    /// The window to stage around while `focused` has focus.
+    ///
+    /// A dialog, alert or floating panel takes focus without being a window
+    /// Stage Left moves. Staging around it would keep only the popup's own app
+    /// and send the windows linked to that app's window into the strip, so the
+    /// stage stays with the app's window: the one already staged, or failing
+    /// that its frontmost. An app with no such window stages around the popup.
+    private func stageWindow(for focused: ManagedWindow, among visible: [ManagedWindow],
+                             order: [CGWindowID: Int]) -> ManagedWindow {
+        guard Accessibility.subrole(focused.element) != kAXStandardWindowSubrole as String else { return focused }
+        let own = visible.filter { $0.pid == focused.pid }
+        if let staged = own.first(where: { lastLead.values.contains($0.id) }) { return staged }
+        return own.min { (order[$0.id] ?? .max) < (order[$1.id] ?? .max) } ?? focused
     }
 
     /// Re-reads which managed screens show a full-screen app, for the strip.
