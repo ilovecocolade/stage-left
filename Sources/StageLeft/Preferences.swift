@@ -11,6 +11,7 @@ final class Preferences {
         static let schema = "schemaVersion"
         static let menuBar = "showsMenuBarIcon"
         static let hidesDock = "hidesDockWhileStaging"
+        static let linkButton = "showsLinkButton"
     }
 
     private let defaults = UserDefaults.standard
@@ -61,6 +62,15 @@ final class Preferences {
     var hidesDockWhileStaging: Bool {
         get { defaults.bool(forKey: Key.hidesDock) }
         set { defaults.set(newValue, forKey: Key.hidesDock) }
+    }
+
+    /// Whether the focused window on a staged screen gets the link button.
+    var showsLinkButton: Bool {
+        get {
+            if defaults.object(forKey: Key.linkButton) == nil { return true }
+            return defaults.bool(forKey: Key.linkButton)
+        }
+        set { defaults.set(newValue, forKey: Key.linkButton) }
     }
 
     /// The screen whose setting the global switch currently reflects.

@@ -22,6 +22,11 @@ and collects nothing.
 - **Per-screen staging.** On a staged screen, the window you are working in stays
   put and the others are tucked into a strip at the left edge. Click one to
   bring it back. Screens you have not selected are never touched.
+- **Linked windows.** Click the small link button poking out of the top-left
+  corner of the window you are working in, and tick any number of other windows
+  on that screen. Linked windows stay on stage together and go into the strip
+  together, as one tile with their icons fanned like cards. "Unlink this window"
+  keeps it on stage and sends the rest of its group to the strip.
 - **Remembers each monitor.** Settings are tied to the physical display, so a
   monitor keeps its setting when you unplug and reconnect it. A monitor Stage Left
   has never seen starts unselected — handy if you move between desks.
@@ -214,7 +219,20 @@ The strip panel is deliberately not `.canJoinAllSpaces`, `.fullScreenAuxiliary`
 or `.stationary`. The first two carried it onto every Space, including
 full-screen apps; the last pinned it in place while a desktop reveal swept the
 real windows away. On top of that it only shows while the window it is staged
-around is on the Space in front of you.
+around is on the Space in front of you. The one exception is a stage that has
+emptied: if that window closes, is minimised or goes full screen and leaves its
+desktop with nothing on it, the strip stays there as the way back.
+
+A panel belongs to the Space it was ordered in on, and one ordered in while a
+swipe is still under way can land on the Space being left — usually a
+full-screen app's, where it sits unseen. So each refresh checks that the strip is
+really on screen, and moves a stranded one to the Space in front. Mission Control
+also takes it off screen but leaves it on its Space, so that case is left alone.
+
+A window coming out of full screen lands on the desktop without any change of
+focus, so a Space change triggers a pass of its own: straight away, and again
+0.5 and 1.5 seconds later, since macOS announces the new Space before that
+window has settled.
 
 A full-screen app is never treated as a stage: swiping to one makes it the
 frontmost window on its display, which would otherwise make Stage Left adopt it.
@@ -298,6 +316,7 @@ to a release build with a plain `./build.sh`.
 | `STAGELEFT_SELFTEST=1` | Dry run: what would be staged, moving nothing |
 | `STAGELEFT_LIVETEST=1` | Stages a real screen for a moment, then restores it |
 | `STAGELEFT_FSTEST=1` | Lists windows macOS reports as full screen |
+| `STAGELEFT_LINKTEST=1` | Links the staged window with one from the strip, then unlinks it |
 | `STAGELEFT_STRIPDUMP=1` | Reports every strip tile's icon and opacity every 2s |
 | `STAGELEFT_STRANDTEST=A,B` | Fault injection: hides app A (recorded) and B (not), then exits without cleaning up |
 | `STAGELEFT_RESCUE=list` | Lists every minimised window |

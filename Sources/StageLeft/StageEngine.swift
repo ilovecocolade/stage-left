@@ -14,8 +14,34 @@ final class StageEngine {
     /// The window each display was last working in, so a display can be staged
     /// without waiting for the user to click something on it.
     private var lastLead: [String: CGWindowID] = [:]
+    /// The same windows' Accessibility elements, to recognise one closing.
+    private var leadElements: [String: AXUIElement] = [:]
 
     private(set) var isRunning = false
+
+    /// Windows the user has linked to go on and off stage together.
+    let links = WindowLinks()
+
+    /// The focused window, when it is the window a managed display is staged
+    /// around: where the link button goes.
+    private(set) var focusedStage: (window: ManagedWindow, display: Display)?
+
+    /// The windows on stage on each managed display, as of the last pass.
+    private var stageWindows: [String: [ManagedWindow]] = [:]
+
+    /// Screens whose Space in front is a full-screen app, as last checked.
+    /// Only managed screens are looked up in it, though an unmanaged one can
+    /// appear when an app has windows on both. The strip's twice-a-second
+    /// refresh reads this instead of asking every app again, because full
+    /// screen comes and goes with the Space: every pass rewrites it, and while
+    /// anything is tucked, so do Space changes and the strip's own rechecks.
+    private(set) var fullScreenDisplays: Set<String> = []
+
+    /// Managed screens whose staged window has left — closed, minimised, its
+    /// app hidden or quit, or gone full screen — with nothing else on stage.
+    /// The strip stays on such a desktop as the way back to the tucked
+    /// windows, but does not follow you onto some other, empty desktop.
+    private(set) var emptiedStages: Set<String> = []
 
     /// Fires after any change the strip or menu should reflect.
     var onStateChange: (() -> Void)?
@@ -32,6 +58,9 @@ final class StageEngine {
         recoverFromPreviousRun()
         reconcileHiddenApps()
         AXObserverCenter.shared.onChange = { [weak self] in self?.evaluate() }
+        AXObserverCenter.shared.isStagedWindow = { [weak self] element in
+            self?.isStaged(element) ?? false
+        }
         AXObserverCenter.shared.start()
         evaluate()
     }
@@ -45,10 +74,65 @@ final class StageEngine {
 
     // MARK: - Queries
 
+    /// By app name, except that linked windows sit together, in the place of
+    /// the first of them.
     func tuckedWindows(on display: Display) -> [TuckedWindow] {
-        tucked.values
-            .filter { $0.homeDisplayID == display.id }
-            .sorted { $0.appName.localizedCaseInsensitiveCompare($1.appName) == .orderedAscending }
+        let here = tucked.values.filter { $0.homeDisplayID == display.id }
+        var anchor: [CGWindowID: String] = [:]
+        for window in here {
+            guard let key = links.groupKey(of: window.id) else { continue }
+            if let name = anchor[key], name.localizedCaseInsensitiveCompare(window.appName) != .orderedDescending { continue }
+            anchor[key] = window.appName
+        }
+        func sortKey(_ window: TuckedWindow) -> (String, CGWindowID, String) {
+            let key = links.groupKey(of: window.id)
+            return (key.flatMap { anchor[$0] } ?? window.appName, key ?? 0, window.appName)
+        }
+        return here.sorted {
+            let (a, b) = (sortKey($0), sortKey($1))
+            if a.0 != b.0 { return a.0.localizedCaseInsensitiveCompare(b.0) == .orderedAscending }
+            if a.1 != b.1 { return a.1 < b.1 }
+            return a.2.localizedCaseInsensitiveCompare(b.2) == .orderedAscending
+        }
+    }
+
+    /// Everything on the display the window is staged on, other than the
+    /// window itself: what it can be linked with.
+    func linkCandidates(for window: CGWindowID) -> [(id: CGWindowID, pid: pid_t, appName: String, title: String)] {
+        guard let stage = focusedStage, stage.window.id == window else { return [] }
+        let visible = (stageWindows[stage.display.id] ?? []).map { (id: $0.id, pid: $0.pid, appName: $0.appName, title: $0.title) }
+        let away = tuckedWindows(on: stage.display).map { (id: $0.id, pid: $0.pid, appName: $0.appName, title: $0.title) }
+        return (visible + away).filter { $0.id != window }
+    }
+
+    /// Links or unlinks, then restages so the change shows at once: a window
+    /// linked from the strip comes onto the stage, one unlinked leaves it.
+    func toggleLink(_ other: CGWindowID, with window: CGWindowID) {
+        links.toggle(other, with: window)
+        restage(around: window)
+    }
+
+    /// Takes the window out of its group. It stays on stage; the rest of the
+    /// group leaves for the strip.
+    func unlink(_ window: CGWindowID) {
+        links.remove(window)
+        restage(around: window)
+    }
+
+    /// Restages with `window` as its display's lead, even if focus has moved
+    /// for a moment, so a link change always applies around the window whose
+    /// button was used.
+    private func restage(around window: CGWindowID) {
+        if let stage = focusedStage, stage.window.id == window {
+            lastLead[stage.display.id] = window
+        }
+        evaluate()
+    }
+
+    /// A strip tile clicked: the window comes back with everything linked to it.
+    func bringBack(_ id: CGWindowID) {
+        for member in links.group(of: id) where member != id { restore(member, activate: false) }
+        restore(id, activate: true)
     }
 
     var tuckedCount: Int { tucked.count }
@@ -68,9 +152,7 @@ final class StageEngine {
         pruneWindowsBroughtBackElsewhere()
 
         let displays = Display.connected
-        // The master switch wins over the per-screen settings: off means every
-        // screen is left alone, and anything already off stage comes back.
-        let managed = SharedState.isStaging ? displays.filter { prefs.state(for: $0) } : []
+        let managed = managed(among: displays)
 
         // Anything belonging to a display we no longer manage comes straight
         // back. Snapshot first — restoring mutates what we are reading.
@@ -79,20 +161,45 @@ final class StageEngine {
             restore(window.id, activate: false)
         }
 
-        guard !managed.isEmpty else { persist(); reconcileHiddenApps(); onStateChange?(); return }
+        focusedStage = nil
+        links.prune()
 
-        // Cmd-Tab can land on a window we took off stage. Bring it back first,
-        // or the user activates an app and sees nothing.
-        if let front = WindowScanner.focusedWindow(), tucked[front.id] != nil {
-            restore(front.id, activate: false)
+        guard !managed.isEmpty else {
+            fullScreenDisplays = []
+            emptiedStages = []
+            stageWindows = [:]
+            persist()
+            reconcileHiddenApps()
+            onStateChange?()
+            return
         }
 
-        let visible = WindowScanner.visibleWindows().filter { tucked[$0.id] == nil }
+        // Cmd-Tab can land on a window we took off stage. Bring it back first,
+        // or the user activates an app and sees nothing. Restoring never moves
+        // focus, so this stays the focused window for the rest of the pass.
         let focused = WindowScanner.focusedWindow()
-        let focusedDisplay = focused.flatMap { Geometry.display(containing: $0.axFrame, among: displays) }
+        if let focused, tucked[focused.id] != nil {
+            restore(focused.id, activate: false)
+        }
 
-        let order = WindowScanner.frontToBackOrder()
-        let fullScreen = WindowScanner.displaysWithFullScreenWindow(among: displays)
+        // Ask only the apps with a window on a staged screen. Their windows on
+        // other screens still count below, for choosing between hiding and
+        // minimising.
+        let snapshot = WindowScanner.snapshot()
+        let apps = snapshot.apps(on: managed)
+        // An app that turned regular after launching is only caught here.
+        AXObserverCenter.shared.watch(apps)
+        // Only windows on the Space in front take part. Accessibility can name
+        // one that is not: the focused window may be full screen on another
+        // Space, and staging around that would empty this desktop.
+        let visible = WindowScanner.visibleWindows(of: apps)
+            .filter { tucked[$0.id] == nil && snapshot.onScreenIDs.contains($0.id) }
+        let onStage = focused.flatMap { snapshot.onScreenIDs.contains($0.id) ? $0 : nil }
+        let focusedDisplay = onStage.flatMap { Geometry.display(containing: $0.axFrame, among: displays) }
+
+        let order = snapshot.frontToBackOrder
+        let fullScreen = WindowScanner.displaysWithFullScreenWindow(of: apps, among: displays, in: snapshot)
+        fullScreenDisplays = fullScreen
 
         for display in managed {
             // Swiping to a full-screen app puts it on its own Space and makes
@@ -109,8 +216,8 @@ final class StageEngine {
             // effect straight away on every managed screen, not just the one
             // holding focus.
             let lead: ManagedWindow?
-            if let focused, focusedDisplay?.id == display.id {
-                lead = focused
+            if let onStage, focusedDisplay?.id == display.id {
+                lead = onStage
             } else if let remembered = lastLead[display.id],
                       let match = onDisplay.first(where: { $0.id == remembered }) {
                 lead = match
@@ -118,14 +225,26 @@ final class StageEngine {
                 lead = onDisplay.min { (order[$0.id] ?? .max) < (order[$1.id] ?? .max) }
             }
 
-            guard let lead else { continue }
+            guard let lead else {
+                if Self.hasLeft(leadElements[display.id]) {
+                    emptiedStages.insert(display.id)
+                } else {
+                    emptiedStages.remove(display.id)
+                }
+                continue
+            }
+            emptiedStages.remove(display.id)
             lastLead[display.id] = lead.id
+            leadElements[display.id] = lead.element
+            if lead.id == onStage?.id { focusedStage = (lead, display) }
 
             var keep: Set<CGWindowID> = [lead.id]
             if prefs.groupsByApp {
                 keep.formUnion(onDisplay.filter { $0.pid == lead.pid }.map(\.id))
                 keep.formUnion(tuckedWindows(on: display).filter { $0.pid == lead.pid }.map(\.id))
             }
+            keep.formUnion(links.group(of: lead.id))
+            stageWindows[display.id] = onDisplay.filter { keep.contains($0.id) }
 
             for window in tuckedWindows(on: display) where keep.contains(window.id) {
                 restore(window.id, activate: false)
@@ -138,6 +257,28 @@ final class StageEngine {
         onStateChange?()
     }
 
+    /// Re-reads which managed screens show a full-screen app, for the strip.
+    func refreshFullScreen(using snapshot: WindowScanner.Snapshot = WindowScanner.snapshot()) {
+        guard isRunning, Accessibility.isTrusted else { return }
+        let displays = Display.connected
+        let managed = managed(among: displays)
+        fullScreenDisplays = managed.isEmpty ? [] : WindowScanner.displaysWithFullScreenWindow(
+            of: snapshot.apps(on: managed), among: displays, in: snapshot)
+    }
+
+    /// Whether an element is a window Stage Left is staging around or has
+    /// tucked away, so that its closing calls for a fresh pass.
+    private func isStaged(_ element: AXUIElement) -> Bool {
+        tucked.values.contains { CFEqual($0.element, element) }
+            || leadElements.values.contains { CFEqual($0, element) }
+    }
+
+    /// The master switch wins over the per-screen settings: off means every
+    /// screen is left alone, and anything already off stage comes back.
+    private func managed(among displays: [Display]) -> [Display] {
+        SharedState.isStaging ? displays.filter { prefs.state(for: $0) } : []
+    }
+
     /// Forgets windows that are back on screen without us restoring them.
     ///
     /// The Dock, Mission Control, Cmd-Tab and taking a window full screen all
@@ -146,8 +287,10 @@ final class StageEngine {
     private func pruneWindowsBroughtBackElsewhere() {
         // Snapshot first — removing while iterating a dictionary is undefined.
         for (id, window) in Array(tucked) {
-            // Give the hide or minimise time to actually take effect.
-            guard Date().timeIntervalSince(window.tuckedAt) > 1.5 else { continue }
+            // Give the hide or minimise time to actually take effect — unless
+            // the window or its app has gone, when there is nothing to wait for.
+            guard Date().timeIntervalSince(window.tuckedAt) > 1.5 || !Self.stillExists(window)
+            else { continue }
 
             let stillOffStage: Bool
             switch window.method {
@@ -158,6 +301,27 @@ final class StageEngine {
             }
             if !stillOffStage { tucked.removeValue(forKey: id) }
         }
+    }
+
+    private static func hasLeft(_ element: AXUIElement?) -> Bool {
+        guard let element else { return false }
+        var pid: pid_t = 0
+        guard AXUIElementGetPid(element, &pid) == .success,
+              let app = NSRunningApplication(processIdentifier: pid),
+              !app.isTerminated, !app.isHidden
+        else { return true }
+        var role: CFTypeRef?
+        if AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &role) == .invalidUIElement {
+            return true
+        }
+        return Accessibility.isMinimized(element) || Accessibility.isFullScreen(element)
+    }
+
+    private static func stillExists(_ window: TuckedWindow) -> Bool {
+        guard NSRunningApplication(processIdentifier: window.pid) != nil else { return false }
+        var role: CFTypeRef?
+        return AXUIElementCopyAttributeValue(window.element, kAXRoleAttribute as CFString, &role)
+            != .invalidUIElement
     }
 
     // MARK: - Taking windows off stage

@@ -15,7 +15,7 @@ enum FullScreenSurvey {
     static func run() {
         guard Accessibility.isTrusted else { write("no accessibility\n"); return }
         let displays = Display.connected
-        let onScreen = WindowScanner.onScreenWindowIDs()
+        let onScreen = WindowScanner.snapshot().onScreenIDs
         var found = 0
 
         for app in NSWorkspace.shared.runningApplications

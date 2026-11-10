@@ -11,8 +11,11 @@ final class MenuController: NSObject, NSMenuDelegate {
     private let menu = NSMenu()
     private var displays: [Display] = []
     private var revealTimer: Timer?
+    private var spaceRechecks: [DispatchWorkItem] = []
+    private var pendingScreenPass: DispatchWorkItem?
     private let settings = SettingsWindowController()
     private let dock = DockController()
+    private let linkButton = LinkButtonController()
 
     private static let hotKeyDigits = [kVK_ANSI_1, kVK_ANSI_2, kVK_ANSI_3, kVK_ANSI_4,
                                        kVK_ANSI_5, kVK_ANSI_6, kVK_ANSI_7, kVK_ANSI_8, kVK_ANSI_9]
@@ -28,6 +31,10 @@ final class MenuController: NSObject, NSMenuDelegate {
             self?.updateDock()
         }
         strip.onSelect = { [weak self] id in self?.bringBack(id) }
+        strip.groupKey = { [weak self] id in self?.engine.links.groupKey(of: id) }
+        linkButton.choices = { [weak self] id in self?.linkChoices(for: id) ?? [] }
+        linkButton.onToggle = { [weak self] other, window in self?.engine.toggleLink(other, with: window) }
+        linkButton.onUnlink = { [weak self] window in self?.engine.unlink(window) }
         strip.onSettings = { [weak self] in self?.showSettings() }
 
         registerHotKeys()
@@ -85,6 +92,7 @@ final class MenuController: NSObject, NSMenuDelegate {
         dock.apply(active: false)
         engine.stop()
         strip.hideAll()
+        linkButton.hide()
         HotKeyCenter.shared.unregisterAll()
     }
 
@@ -143,14 +151,34 @@ final class MenuController: NSObject, NSMenuDelegate {
         displays = Display.connected
     }
 
+    /// Full screen comes and goes with the Space. A window leaving full screen
+    /// lands on the desktop without any change of focus, so nothing else would
+    /// stage it, and macOS announces the new Space before that window has
+    /// settled: stage now, and again once it has.
     @objc private func spaceChanged() {
-        refreshStrips()
+        // The pass ends by refreshing the strips with what it has just read.
+        // Refreshing them first would act on full-screen state from before the
+        // change, and could pull the strip onto a full-screen app's Space.
+        engine.evaluate()
+        spaceRechecks.forEach { $0.cancel() }
+        spaceRechecks = [0.5, 1.5].map { delay in
+            let work = DispatchWorkItem { [weak self] in self?.engine.evaluate() }
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+            return work
+        }
     }
 
+    /// A monitor connecting, disconnecting or waking. AppKit posts this from
+    /// inside the display reconfiguration, usually twice, while every app is
+    /// re-laying out its windows. Update the screen list at once, but stage
+    /// once things have settled, in a single pass.
     @objc private func screensChanged() {
         reloadDisplays()
-        engine.evaluate()
         refreshIcon()
+        pendingScreenPass?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.engine.evaluate() }
+        pendingScreenPass = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
     }
 
     private var managedDisplays: [Display] {
@@ -184,32 +212,89 @@ final class MenuController: NSObject, NSMenuDelegate {
         }
     }
 
-    private func refreshStrips() {
+    /// Runs twice a second while anything is tucked, so it asks the window
+    /// server once and, as a rule, no app anything. Full-screen state comes
+    /// from the last pass or Space change; with `verifyingNewStrips` set it is
+    /// re-read only when a strip is about to appear or a staged screen is
+    /// showing a full-screen app.
+    private func refreshStrips(verifyingNewStrips: Bool = false) {
         let displays = managedDisplays
-        let showing = WindowScanner.displaysShowingWindows(among: displays)
-        let onScreen = WindowScanner.onScreenWindowIDs()
-        let fullScreen = WindowScanner.displaysWithFullScreenWindow(among: displays)
+        guard !displays.isEmpty, engine.tuckedCount > 0 else {
+            strip.update([], onScreen: [])
+            watchForDesktopReveal(active: false)
+            updateLinkButton(WindowScanner.snapshot())
+            return
+        }
+        let snapshot = WindowScanner.snapshot()
+        defer { updateLinkButton(snapshot) }
 
-        // Show a strip only where its own stage is: the display must still have
-        // windows on it, and the window it is staged around must be on the
-        // desktop in front of you rather than another Space.
-        strip.update(displays
-            .filter { display in
-                guard showing.contains(display.id), !fullScreen.contains(display.id) else { return false }
-                guard let lead = engine.leadWindow(on: display) else { return false }
-                return onScreen.contains(lead)
-            }
-            .map { (display: $0, windows: engine.tuckedWindows(on: $0)) })
-        watchForDesktopReveal(active: !displays.isEmpty && engine.tuckedCount > 0)
+        // Show a strip only where its own stage is: beside the window it is
+        // staged around, while that window is on the desktop in front of you,
+        // and not while a desktop reveal has swept the windows aside. If that
+        // window has left — closed, or gone full screen — and nothing else is
+        // on this desktop, the strip is the only way back to the rest.
+        func stages() -> [(display: Display, windows: [TuckedWindow])] {
+            let showing = snapshot.displaysShowingWindows(among: displays)
+            return displays
+                .filter { display in
+                    guard !engine.fullScreenDisplays.contains(display.id) else { return false }
+                    let leadOnScreen = engine.leadWindow(on: display)
+                        .map { snapshot.onScreenIDs.contains($0) } ?? false
+                    if leadOnScreen { return showing.contains(display.id) }
+                    return !showing.contains(display.id) && engine.emptiedStages.contains(display.id)
+                }
+                .map { (display: $0, windows: engine.tuckedWindows(on: $0)) }
+        }
+
+        var contents = stages()
+        // Re-read full screen while a reading could be stale in a way that
+        // matters: one from before a full-screen app took over must never open
+        // or move a strip on top of it, and one from before it left must not
+        // keep the strip away. Otherwise the tick asks no app anything.
+        let flagged = displays.contains { engine.fullScreenDisplays.contains($0.id) }
+        if verifyingNewStrips, flagged || contents.contains(where: {
+            $0.display.screen != nil && !$0.windows.isEmpty
+                && strip.needsOrdering(on: $0.display.id, onScreen: snapshot.onScreenIDs)
+        }) {
+            engine.refreshFullScreen(using: snapshot)
+            contents = stages()
+        }
+        strip.update(contents, onScreen: snapshot.onScreenIDs)
+        watchForDesktopReveal(active: true)
     }
 
-    /// Revealing the desktop raises no notification of its own, so poll — but
-    /// only while a strip is actually on screen, which keeps it near-free.
+    /// The link button goes on the focused window while it is the stage of a
+    /// staged screen in front of you, and not during a desktop reveal.
+    private func updateLinkButton(_ snapshot: WindowScanner.Snapshot) {
+        guard prefs.showsLinkButton, engine.isRunning, let stage = engine.focusedStage,
+              !engine.fullScreenDisplays.contains(stage.display.id),
+              snapshot.onScreenIDs.contains(stage.window.id),
+              snapshot.displaysShowingWindows(among: [stage.display]).contains(stage.display.id)
+        else { linkButton.hide(); return }
+        linkButton.show(on: stage.window, linked: engine.links.isLinked(stage.window.id))
+    }
+
+    /// The other windows on the screen, ticked when linked to this one.
+    private func linkChoices(for window: CGWindowID) -> [LinkChoice] {
+        let group = engine.links.group(of: window)
+        return engine.linkCandidates(for: window).map { candidate in
+            let label = candidate.title.isEmpty || candidate.title == candidate.appName
+                ? candidate.appName : "\(candidate.appName) — \(candidate.title)"
+            return LinkChoice(id: candidate.id, pid: candidate.pid, label: label,
+                              linked: group.contains(candidate.id))
+        }
+    }
+
+    /// Revealing the desktop raises no notification of its own, so poll while
+    /// anything is tucked on a managed screen. Each tick is one window-server
+    /// query, which keeps it near-free.
     private func watchForDesktopReveal(active: Bool) {
         if active, revealTimer == nil {
-            revealTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
-                self?.refreshStrips()
+            let timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+                self?.refreshStrips(verifyingNewStrips: true)
             }
+            timer.tolerance = 0.1
+            revealTimer = timer
         } else if !active {
             revealTimer?.invalidate()
             revealTimer = nil
@@ -233,7 +318,7 @@ final class MenuController: NSObject, NSMenuDelegate {
     // MARK: - Actions
 
     private func bringBack(_ id: CGWindowID) {
-        engine.restore(id, activate: true)
+        engine.bringBack(id)
         // Activation is asynchronous, so let focus settle before restaging.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in self?.engine.evaluate() }
     }
@@ -433,6 +518,7 @@ final class MenuController: NSObject, NSMenuDelegate {
         if environment["STAGELEFT_LIVETEST"] != nil { LiveTest.run(engine: engine, preferences: prefs) }
         if let argument = environment["STAGELEFT_RESCUE"] { Rescue.run(argument: argument) }
         if environment["STAGELEFT_FSTEST"] != nil { FullScreenSurvey.run() }
+        if environment["STAGELEFT_LINKTEST"] != nil { LinkTest.run(engine: engine) }
         if let target = environment["STAGELEFT_STRANDTEST"] { StrandTest.run(appNamed: target) }
         if environment["STAGELEFT_STRIPDUMP"] != nil {
             Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in

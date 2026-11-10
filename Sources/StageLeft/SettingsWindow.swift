@@ -76,6 +76,15 @@ private struct SettingsView: View {
                 get: { actions.preferences.groupsByApp },
                 set: { actions.preferences.groupsByApp = $0 }))
 
+            Toggle("Show the link button on windows", isOn: toggle(
+                get: { actions.preferences.showsLinkButton },
+                set: { actions.preferences.showsLinkButton = $0 }))
+
+            Text("Linked windows go on and off stage together. Use the button at the top left of a window to link it.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
             Toggle("Hide the Dock while staging", isOn: toggle(
                 get: { actions.preferences.hidesDockWhileStaging },
                 set: { actions.preferences.hidesDockWhileStaging = $0 }))

@@ -12,8 +12,12 @@ final class StripController {
     var onSelect: ((CGWindowID) -> Void)?
     /// Called when the user clicks the settings button under the icons.
     var onSettings: (() -> Void)?
+    /// The group a window is linked into, if any. A group shares one tile.
+    var groupKey: (CGWindowID) -> CGWindowID? = { _ in nil }
 
-    func update(_ contents: [(display: Display, windows: [TuckedWindow])]) {
+    /// `onScreen` is the window server's on-screen list from just before this
+    /// update, used to spot a strip stranded on another Space.
+    func update(_ contents: [(display: Display, windows: [TuckedWindow])], onScreen: Set<CGWindowID>) {
         var seen = Set<String>()
 
         for (display, windows) in contents {
@@ -22,8 +26,13 @@ final class StripController {
 
             if let panel = panels[display.id] {
                 panel.apply(windows: windows, screen: screen)
+                // A panel belongs to the Space it was ordered in on. One ordered
+                // in while a swipe was still under way can land on the Space
+                // being left, usually a full-screen app's, and sit there unseen.
+                if panel.isStranded(onScreen: onScreen) { panel.moveToCurrentSpace() }
             } else {
                 let panel = StripPanel(onSelect: { [weak self] id in self?.onSelect?(id) },
+                                       groupKey: { [weak self] id in self?.groupKey(id) },
                                        onSettings: { [weak self] in self?.onSettings?() })
                 panels[display.id] = panel
                 panel.apply(windows: windows, screen: screen)
@@ -35,6 +44,13 @@ final class StripController {
         for id in Array(panels.keys) where !seen.contains(id) {
             panels.removeValue(forKey: id)?.dismiss()
         }
+    }
+
+    /// Whether showing this display's strip means ordering a panel in: there
+    /// is none yet, or it was left on a Space no longer in front.
+    func needsOrdering(on displayID: String, onScreen: Set<CGWindowID>) -> Bool {
+        guard let panel = panels[displayID] else { return true }
+        return panel.isStranded(onScreen: onScreen)
     }
 
     func hideAll() {
@@ -80,10 +96,15 @@ private final class StripPanel {
     /// backing can be made translucent on its own.
     private let items = NSView()
     private let onSelect: (CGWindowID) -> Void
-    private var shownIDs: [CGWindowID] = []
+    private let groupKey: (CGWindowID) -> CGWindowID?
+    /// The windows on each tile, as last laid out.
+    private var shown: [[CGWindowID]] = []
 
-    init(onSelect: @escaping (CGWindowID) -> Void, onSettings: @escaping () -> Void) {
+    init(onSelect: @escaping (CGWindowID) -> Void,
+         groupKey: @escaping (CGWindowID) -> CGWindowID?,
+         onSettings: @escaping () -> Void) {
         self.onSelect = onSelect
+        self.groupKey = groupKey
 
         panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: Metrics.width, height: Metrics.width),
                         styleMask: [.borderless, .nonactivatingPanel],
@@ -101,7 +122,8 @@ private final class StripPanel {
         // sweeps the real windows away; the other two carry it onto every
         // Space, including a full-screen app's own, which is how it ended up
         // floating over unrelated maximised windows. Without them the strip
-        // stays on the desktop it was put on, next to the windows it lists.
+        // stays on the desktop it was put on, next to the windows it lists —
+        // unless it was put on the wrong one mid-swipe; see moveToCurrentSpace.
         panel.collectionBehavior = [.ignoresCycle]
 
         background = NSVisualEffectView()
@@ -139,18 +161,22 @@ private final class StripPanel {
     // MARK: Contents
 
     func apply(windows: [TuckedWindow], screen: NSScreen) {
-        let height = CGFloat(windows.count) * Metrics.tile
-            + CGFloat(max(0, windows.count - 1)) * Metrics.spacing
+        let tiles = self.tiles(for: windows)
+        let height = CGFloat(tiles.count) * Metrics.tile
+            + CGFloat(max(0, tiles.count - 1)) * Metrics.spacing
             + Metrics.padding * 2 + Metrics.footer.height
         let visible = screen.visibleFrame
-        let frame = NSRect(x: visible.minX + Metrics.padding,
-                           y: visible.midY - height / 2,
+        // Whole points: the window server rounds the frames it is given, so an
+        // unrounded target never matches and the strip would re-animate on
+        // every refresh.
+        let frame = NSRect(x: (visible.minX + Metrics.padding).rounded(.down),
+                           y: (visible.midY - height / 2).rounded(.down),
                            width: Metrics.width,
                            height: height)
 
-        let ids = windows.map(\.id)
-        let contentsChanged = ids != shownIDs
-        shownIDs = ids
+        let members = tiles.map { $0.map(\.id) }
+        let contentsChanged = members != shown
+        shown = members
 
         // Reflow and restack together so the panel never jumps ahead of the
         // icons it contains.
@@ -160,17 +186,39 @@ private final class StripPanel {
         background.frame = bounds
         items.frame = bounds
 
+        // This runs twice a second. Animating to where the panel already is
+        // still drives the display for the length of the animation.
+        let moves = panel.frame != frame
+        guard moves || contentsChanged else { return }
+
         NSAnimationContext.runAnimationGroup { context in
             context.duration = panel.alphaValue == 0 ? 0 : Metrics.reflow
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
             context.allowsImplicitAnimation = true
-            panel.animator().setFrame(frame, display: true)
-            if contentsChanged { layout(windows: windows, height: height) }
+            if moves { panel.animator().setFrame(frame, display: true) }
+            if contentsChanged { layout(tiles: tiles, height: height) }
         }
     }
 
-    private func layout(windows: [TuckedWindow], height: CGFloat) {
-        let wanted = Set(windows.map(\.id))
+    /// One tile per window, except that linked windows share one. The engine
+    /// already lists a group's windows next to each other.
+    private func tiles(for windows: [TuckedWindow]) -> [[TuckedWindow]] {
+        var result: [[TuckedWindow]] = []
+        var lastKey: CGWindowID?
+        for window in windows {
+            let key = groupKey(window.id)
+            if let key, key == lastKey, !result.isEmpty {
+                result[result.count - 1].append(window)
+            } else {
+                result.append([window])
+            }
+            lastKey = key
+        }
+        return result
+    }
+
+    private func layout(tiles: [[TuckedWindow]], height: CGFloat) {
+        let wanted = Set(tiles.map { $0[0].id })
         let present = items.subviews.compactMap { $0 as? StripItemView }
 
         for view in present where !wanted.contains(view.windowID) && !view.isLeaving {
@@ -191,15 +239,18 @@ private final class StripPanel {
                                   uniquingKeysWith: { first, _ in first })
 
         // Top to bottom reads more naturally than AppKit's bottom-up origin.
-        for (index, window) in windows.enumerated() {
+        for (index, members) in tiles.enumerated() {
+            let window = members[0]
             let y = height - Metrics.padding - Metrics.tile - CGFloat(index) * (Metrics.tile + Metrics.spacing)
             let origin = NSPoint(x: Metrics.padding, y: y)
 
             if let view = reusable[window.id] {
-                view.refresh(with: window)
+                view.refresh(with: members)
                 view.animator().setFrameOrigin(origin)
             } else {
-                let view = StripItemView(window: window) { [weak self] id in self?.onSelect(id) }
+                let view = StripItemView(windows: members) { [weak self] id in
+                    self?.onSelect(id)
+                }
                 view.frame = NSRect(origin: origin, size: NSSize(width: Metrics.tile, height: Metrics.tile))
                 view.alphaValue = 0
                 items.addSubview(view)
@@ -219,6 +270,20 @@ private final class StripPanel {
     }
 
     // MARK: Appearance
+
+    var windowID: CGWindowID { CGWindowID(panel.windowNumber) }
+
+    /// Off screen because it is on a Space no longer in front. Mission Control
+    /// and App Exposé take the strip off screen too, but leave it on its Space,
+    /// and re-ordering it then would only churn their layout.
+    func isStranded(onScreen: Set<CGWindowID>) -> Bool {
+        !onScreen.contains(windowID) && !panel.isOnActiveSpace
+    }
+
+    func moveToCurrentSpace() {
+        panel.orderOut(nil)
+        panel.orderFrontRegardless()
+    }
 
     func appear() {
         panel.orderFrontRegardless()
@@ -320,53 +385,100 @@ private final class StripSettingsButton: StripHoverView {
     }
 }
 
-// MARK: - One icon
+// MARK: - One tile
 
+/// A tucked window's app icon, or for linked windows, their icons fanned out
+/// over each other like a hand of cards. Either way one click brings back
+/// everything on the tile.
 private final class StripItemView: StripHoverView {
     let windowID: CGWindowID
     /// Set while the view is fading out and awaiting removal.
     var isLeaving = false
     private let action: (CGWindowID) -> Void
-    private let iconView = NSImageView()
+    private let fan = IconFanView()
 
-    init(window: TuckedWindow, action: @escaping (CGWindowID) -> Void) {
-        self.windowID = window.id
+    /// The most icons a fan shows; any more sit hidden under the last.
+    private static let fanLimit = 4
+
+    init(windows: [TuckedWindow], action: @escaping (CGWindowID) -> Void) {
+        self.windowID = windows[0].id
         self.action = action
         super.init(cornerRadius: 12)
-
-        iconView.imageScaling = .scaleProportionallyUpOrDown
-        iconView.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(iconView)
-        NSLayoutConstraint.activate([
-            iconView.centerXAnchor.constraint(equalTo: centerXAnchor),
-            iconView.centerYAnchor.constraint(equalTo: centerYAnchor),
-            iconView.widthAnchor.constraint(equalToConstant: StripPanel.Metrics.icon),
-            iconView.heightAnchor.constraint(equalToConstant: StripPanel.Metrics.icon),
-        ])
-
-        refresh(with: window)
-    }
-
-    /// Re-reads the icon and clears any leftover fade. An app's icon can come
-    /// back nil for a moment, and a tile that renders as nothing is worse than
-    /// a placeholder — it looks like the strip has holes in it.
-    func refresh(with window: TuckedWindow) {
-        isLeaving = false
-        alphaValue = 1
-        iconView.image = window.appIcon
-            ?? NSImage(systemSymbolName: "app.dashed", accessibilityDescription: window.appName)
-        toolTip = window.title.isEmpty ? window.appName : "\(window.appName) — \(window.title)"
+        // Sized by hand in setFrameSize: autoresizing grown from a zero-sized
+        // tile doubles the fan and pushes every icon off centre.
+        addSubview(fan)
+        setAccessibilityElement(true)
+        setAccessibilityRole(.button)
+        refresh(with: windows)
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
 
-    var hasNoIcon: Bool { iconView.image == nil }
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        fan.frame = bounds
+    }
+
+    /// Re-reads the icons and clears any leftover fade. An app's icon can come
+    /// back nil for a moment, and a tile that renders as nothing is worse than
+    /// a placeholder — it looks like the strip has holes in it.
+    func refresh(with windows: [TuckedWindow]) {
+        isLeaving = false
+        alphaValue = 1
+        fan.icons = windows.prefix(Self.fanLimit).map {
+            $0.appIcon ?? NSImage(systemSymbolName: "app.dashed", accessibilityDescription: $0.appName)
+        }
+        let names = windows.map { $0.title.isEmpty ? $0.appName : "\($0.appName) — \($0.title)" }
+        toolTip = windows.count > 1 ? "Linked:\n" + names.joined(separator: "\n") : names.first
+        setAccessibilityLabel(windows.count > 1 ? "Linked windows: " + names.joined(separator: ", ") : names.first)
+    }
+
+    var hasNoIcon: Bool { fan.icons.isEmpty || fan.icons.contains { $0 == nil } }
 
     func report() -> String {
-        "\(iconView.image == nil ? "NO-ICON" : "icon")@\(String(format: "%.2f", alphaValue))\(isLeaving ? "/leaving" : "")"
+        "\(hasNoIcon ? "NO-ICON" : "icon")x\(fan.icons.count)@\(String(format: "%.2f", alphaValue))\(isLeaving ? "/leaving" : "")"
     }
 
     override func mouseDown(with event: NSEvent) {
         action(windowID)
+    }
+}
+
+/// Draws one icon centred, or several fanned out like a hand of cards, each
+/// lying over the one before it. Drawn rather than built from rotated views,
+/// which AppKit positions unreliably while the strip animates.
+private final class IconFanView: NSView {
+    var icons: [NSImage?] = [] { didSet { needsDisplay = true } }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let center = NSPoint(x: bounds.midX, y: bounds.midY)
+        guard icons.count > 1 else {
+            let size = StripPanel.Metrics.icon
+            icons.first??.draw(in: NSRect(x: center.x - size / 2, y: center.y - size / 2, width: size, height: size))
+            return
+        }
+        let size: CGFloat = 30
+        let spread: CGFloat = icons.count == 2 ? 6 : 7
+        let tilt: CGFloat = icons.count == 2 ? 9 : 12
+        let shadow = NSShadow()
+        shadow.shadowColor = NSColor.black.withAlphaComponent(0.35)
+        shadow.shadowBlurRadius = 2
+        shadow.shadowOffset = NSSize(width: 0, height: -1)
+
+        for (index, icon) in icons.enumerated() {
+            guard let icon else { continue }
+            // -1 for the card on the left to 1 for the one on the right.
+            let position = CGFloat(index) / CGFloat(icons.count - 1) * 2 - 1
+            NSGraphicsContext.saveGraphicsState()
+            shadow.set()
+            let transform = NSAffineTransform()
+            transform.translateX(by: center.x + position * spread, yBy: center.y + 1 - abs(position) * 1.5)
+            transform.rotate(byDegrees: -position * tilt)
+            transform.concat()
+            icon.draw(in: NSRect(x: -size / 2, y: -size / 2, width: size, height: size))
+            NSGraphicsContext.restoreGraphicsState()
+        }
     }
 }
