@@ -189,6 +189,11 @@ final class StageEngine {
         let apps = snapshot.apps(on: managed)
         // An app that turned regular after launching is only caught here.
         AXObserverCenter.shared.watch(apps)
+        let fullScreenApps = WindowScanner.fullScreenApps(of: apps, among: displays, in: snapshot)
+        let fullScreen = Set(fullScreenApps.keys)
+        fullScreenDisplays = fullScreen
+        settleUnhiddenApps(fullScreen: fullScreenApps)
+
         // Only windows on the Space in front take part. Accessibility can name
         // one that is not: the focused window may be full screen on another
         // Space, and staging around that would empty this desktop.
@@ -198,9 +203,6 @@ final class StageEngine {
         let onStage = focused.flatMap { snapshot.onScreenIDs.contains($0.id) ? $0 : nil }
             .map { stageWindow(for: $0, among: visible, order: order) }
         let focusedDisplay = onStage.flatMap { Geometry.display(containing: $0.axFrame, among: displays) }
-
-        let fullScreen = WindowScanner.displaysWithFullScreenWindow(of: apps, among: displays, in: snapshot)
-        fullScreenDisplays = fullScreen
 
         for display in managed {
             // Swiping to a full-screen app puts it on its own Space and makes
@@ -316,9 +318,41 @@ final class StageEngine {
             case .minimized:
                 stillOffStage = Accessibility.isMinimized(window.element)
             case .appHidden:
-                stillOffStage = NSRunningApplication(processIdentifier: window.pid)?.isHidden ?? false
+                // An app unhidden behind our back is settled later in the
+                // pass, once it is known which screens show a full-screen app.
+                stillOffStage = NSRunningApplication(processIdentifier: window.pid) != nil
             }
             if !stillOffStage { tucked.removeValue(forKey: id) }
+        }
+    }
+
+    /// Settles windows tucked away by hiding their app, once something else has
+    /// unhidden it: the Dock, Cmd-Tab, or swiping to that app's full-screen
+    /// window on another Space, which activates the app and so unhides it.
+    ///
+    /// Usually the windows are then back on screen and no longer off stage. But
+    /// while their screen shows that same app full screen, their desktop is out
+    /// of sight, and they would be sitting there when you swipe back, for the
+    /// moment a pass takes to notice. So they are minimised instead, unseen,
+    /// and stay in the strip. Only for the app that is full screen: Cmd-Tab
+    /// from another app's full-screen window can be on its way to the desktop
+    /// to show the very window that would be minimised.
+    private func settleUnhiddenApps(fullScreen: [String: Set<pid_t>]) {
+        for (id, window) in Array(tucked) where window.method == .appHidden {
+            guard Date().timeIntervalSince(window.tuckedAt) > 1.5 || !Self.stillExists(window),
+                  let app = NSRunningApplication(processIdentifier: window.pid), !app.isHidden
+            else { continue }
+
+            if fullScreen[window.homeDisplayID]?.contains(window.pid) == true, Self.stillExists(window),
+               AXUIElementSetAttributeValue(window.element, kAXMinimizedAttribute as CFString,
+                                            kCFBooleanTrue) == .success {
+                tucked[id] = TuckedWindow(id: window.id, pid: window.pid, element: window.element,
+                                          appName: window.appName, title: window.title,
+                                          bundleID: window.bundleID, homeDisplayID: window.homeDisplayID,
+                                          method: .minimized, tuckedAt: Date())
+            } else {
+                tucked.removeValue(forKey: id)
+            }
         }
     }
 

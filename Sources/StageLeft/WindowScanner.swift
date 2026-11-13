@@ -120,7 +120,14 @@ enum WindowScanner {
     static func displaysWithFullScreenWindow(of apps: [NSRunningApplication],
                                              among displays: [Display],
                                              in snapshot: Snapshot) -> Set<String> {
-        var result = Set<String>()
+        Set(fullScreenApps(of: apps, among: displays, in: snapshot).keys)
+    }
+
+    /// The same, with the apps whose full-screen window each display shows.
+    static func fullScreenApps(of apps: [NSRunningApplication],
+                               among displays: [Display],
+                               in snapshot: Snapshot) -> [String: Set<pid_t>] {
+        var result: [String: Set<pid_t>] = [:]
 
         for app in apps {
             for element in Accessibility.windows(ofPID: app.processIdentifier) {
@@ -130,7 +137,7 @@ enum WindowScanner {
                       let frame = Accessibility.frame(element),
                       let display = Geometry.display(containing: frame, among: displays)
                 else { continue }
-                result.insert(display.id)
+                result[display.id, default: []].insert(app.processIdentifier)
             }
         }
         return result

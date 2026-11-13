@@ -44,7 +44,8 @@ and collects nothing.
   macOS 27 with two displays. The Control Centre button needs macOS 26 or later.
 - **Accessibility permission**, which macOS asks for on first launch. Stage Left
   needs it to hide, minimise and restore other apps' windows, and uses it for
-  nothing else.
+  nothing else. On macOS 27 its list is **System Settings → Privacy & Security →
+  Device Control and Data Access**; earlier versions call it **Accessibility**.
 - To build: Xcode Command Line Tools. The Control Centre button additionally
   needs a full Xcode.
 
@@ -70,8 +71,8 @@ xattr -dr com.apple.quarantine "/Applications/Stage Left.app"
 ```
 
 It also means **Accessibility must be granted again after each update**: remove
-Stage Left from System Settings → Privacy & Security → Accessibility, then add it
-back.
+Stage Left from System Settings → Privacy & Security → Device Control and Data
+Access (Accessibility before macOS 27), then add it back.
 
 Each release lists the zip's SHA-256 checksum. To check your download against
 it:
@@ -99,7 +100,8 @@ with every build, so macOS treats each build as a new app and silently drops the
 Accessibility permission you granted. Without a certificate the app still works,
 but you will have to grant the permission again after each build — and if it ever
 claims to need permission you have already given, remove Stage Left from System
-Settings → Privacy & Security → Accessibility and add it again.
+Settings → Privacy & Security → Device Control and Data Access (Accessibility
+before macOS 27) and add it again.
 
 `./build.sh --package` builds a release download instead of installing. It
 signs ad-hoc, since a development certificate would name its owner in every
@@ -181,6 +183,12 @@ Two mechanisms, chosen per app:
 - **Minimising the window** — costs the Dock animation, so it is the fallback
   for apps with windows on several screens. Switching the Dock's minimise effect
   to Scale in System Settings makes it quicker.
+
+A window full screen on another Space is invisible to the first check, so an app
+can be hidden along with its full-screen window. Swiping to that window
+activates the app and unhides everything. While the screen shows that app full
+screen, Stage Left minimises the windows it had hidden instead, out of sight,
+so they are not waiting on the desktop when you swipe back.
 
 Tried and rejected:
 
